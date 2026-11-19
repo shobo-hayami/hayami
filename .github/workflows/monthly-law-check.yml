@@ -1,0 +1,45 @@
+# 毎月1〜4日の朝9時（日本時間）に、条文を確かめて公開の画面を更新する。AIは使わない。
+# 今月もう確かめ終えていれば、2日目以降は何もしない。
+name: monthly-law-check
+on:
+  schedule:
+    - cron: "0 0 1-4 * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: 条文を確かめて画面を作る
+        run: python -I "道具/公開の更新.py"
+      - name: 確かめた結果を残す
+        run: |
+          git config user.name "law-check-bot"
+          git config user.email "law-check-bot@users.noreply.github.com"
+          git add 条文の控え 公開 見直しが要る.txt 2>/dev/null || git add 条文の控え 公開
+          git diff --cached --quiet || (git commit -m "毎月の条文の確かめ $(date +%F)" && git push)
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: 公開
+      - id: deploy
+        uses: actions/deploy-pages@v4
+      - name: 人の確かめが要るときは知らせる
+        run: |
+          if [ -f 見直しが要る.txt ]; then cat 見直しが要る.txt; exit 1; fi
