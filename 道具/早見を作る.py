@@ -271,7 +271,7 @@ def main():
     rows = rows + rules_html
     if test_ok:
         rows = rules_html  # 用途別の基準は判定の表の中に重ねて出す
-        js = (ROOT / "道具" / "判定.js").read_text(encoding="utf-8") + "\n" + (ROOT / "道具" / "語.js").read_text(encoding="utf-8")
+        js = (ROOT / "道具" / "判定.js").read_text(encoding="utf-8") + "\n" + (ROOT / "道具" / "語.js").read_text(encoding="utf-8") + "\n" + (ROOT / "道具" / "号.js").read_text(encoding="utf-8")
         # 練習問題: 試験に通ったときだけ入口を出す（落ちても早見の本体は出す）
         import subprocess
         rp = subprocess.run(["node", str(ROOT / "道具" / "試験_練習.js")], capture_output=True, encoding="utf-8", errors="replace")
@@ -279,6 +279,11 @@ def main():
         test_msg += " / " + ((rp.stdout.strip().splitlines() or ["練習問題の試験が動かなかった"])[-1])
         if not 練習あり:
             problems.append("練習問題の試験に失敗。練習問題の入口は出していない: " + rp.stdout.strip().replace("\n", " / ")[:300])
+        # 号を開く: 判定表の号の名前を全部切り出して確かめる。落ちたら一覧に出す（早見の本体は作る）
+        rg = subprocess.run(["node", str(ROOT / "道具" / "試験_号.js")], capture_output=True, encoding="utf-8", errors="replace")
+        test_msg += " / " + ((rg.stdout.strip().splitlines() or ["号を開く試験が動かなかった"])[-1])
+        if rg.returncode != 0:
+            problems.append("号を開く試験に失敗: " + rg.stdout.strip().replace("\n", " / ")[:300])
         js += "\n" + (ROOT / "道具" / "練習.js").read_text(encoding="utf-8")
         js += "\nvar 練習あり=" + ("true" if 練習あり else "false") + ";\nvar 練習の例題=" + (ROOT / "道具" / "例題.json").read_text(encoding="utf-8").strip() + ";\nvar 練習の境目=" + (ROOT / "道具" / "例題_境目.json").read_text(encoding="utf-8").strip() + ";"
         judge = ("<script>" + js + "\nvar 表たち=" + json.dumps(tables, ensure_ascii=False) + ";\n" + "var 設備の順=" + json.dumps(EQUIP, ensure_ascii=False) + ";\nvar 基準=" + json.dumps(基準, ensure_ascii=False)
@@ -608,7 +613,7 @@ function 既存の文(r, st){
     + '<details class="sum"><summary>今の基準になる場合</summary>・基準が変わっていなければ、今の基準のまま。<br>・前の基準にも合っていなかった設備（17条の2の5第2項1号）。<br>・基準が変わった後に着工した増築・改築の部分の床面積の合計が1,000㎡以上、または基準が変わった時の延べ面積の2分の1以上になる建物（同2号・令34条の2）。<br>・基準が変わった後に、主要構造部である壁の過半を修繕・模様替えした建物（同2号・令34条の3）。<br>・今の基準に合うようになった設備（同3号）。<br>・用途を変えた建物は別の決まり（17条の3）。変えた後の用途が特定防火対象物でなければ、変える前の用途の基準を当てはめる場合がある。<br>・市町村の火災予防条例の基準にも同じ決まりがある。</details></div>';
 }
 // 境目までの距離（要らないの設備に、要るに変わる線を出す。判定の状態は変えない）
-var 切替の文 = {宿泊:'利用者を入居・宿泊させると要る', 介助主:'介助がなければ避難できない人を主として入所させると要る', 火気:'火を使う設備や器具を設けると要る', 平屋以外:'平屋建でなくなると要る', 鉄網:'下地が準不燃材料でない鉄網入りの壁・床・天井があると要る', 契約50超:'契約電流容量が50アンペアを超えると要る', 高さ31超:'高さが31mを超えると要る', 直通1:'直通階段が1つになると要る', 特定_避難階以外:'特定用途の部分が3階以上か地階に入ると要る', 危険物類:'少量危険物か指定可燃物を貯蔵・取り扱うと要る', 下階特定:'下の階に一項〜四項などの部分が入ると要る', ラック10m超:'天井の高さが10mを超えるラック式倉庫だと要る', 舞台_地階無窓4階:'舞台が地階・無窓階・4階以上の階にあると要る', 地下街_六項イロ:'地下街の中に六項イ(1)(2)・ロの部分があると、その部分に要る', 地下街_自火報の部分:'地下街の中に二項ニ・五項イ・六項イ(1)〜(3)・ロなどの部分があると、その部分に要る'};
+var 切替の文 = {宿泊:'利用者を入居・宿泊させると要る', 介助主:'介助がなければ避難できない人を主として入所させると要る', 火気:'火を使う設備や器具を設けると要る', 平屋以外:'平屋建でなくなると要る', 鉄網:'下地が準不燃材料でない鉄網入りの壁・床・天井があると要る', 契約50超:'契約電流容量が50アンペアを超えると要る', 高さ31超:'高さが31mを超えると要る', 直通1:'直通階段が1つになると要る', 特定_避難階以外:'特定用途の部分が3階以上か地階に入ると要る', 危険物類:'少量危険物か指定可燃物を貯蔵・取り扱うと要る', 下階特定:'下の階に一項〜四項などの部分が入ると要る', ラック10m超:'天井の高さが10mを超えるラック式倉庫だと要る', 舞台_地階無窓4階:'舞台が地階・無窓階・4階以上の階にあると要る', 地下街_六項イロ:'地下街の中に六項イ(1)(2)・ロの部分があると、その部分に要る', 地下街_自火報の部分:'地下街の中に二項ニ・五項イ・六項イ(1)〜(3)・ロなどの部分があると、その部分に要る', 地下街_直通1:'避難階か地上へ直通する階段が1つになると要る', 地下街_特定の部分:'地下街の中に特定用途の部分が入ると要る', 準地下街_直通1:'避難階か地上へ直通する階段が1つになると要る'};
 function 数字(v){ return Number(v).toLocaleString('ja-JP'); }
 function 値の名(x){
   if(/^max:/.test(x.名)) return x.名.slice(4).split(',').map(function(k){ return (語の名[k] || k).replace(/の床面積$/, ''); }).join('・') + 'のどれかの階の床面積';
@@ -675,26 +680,6 @@ function 要約(たたむ){
   if(!a.length) return '';
   if(たたむ) return '<details class="sum"><summary>入れた値 '+a.length+'件（押すと開く・直せる）</summary>'+a.join('')+'</details>';
   return '<div class="sum">入れた値（押すと直せる）: '+a.join('')+'</div>';
-}
-var 全数字 = '０１２３４５６７８９';
-function 漢数(n){ var d = '〇一二三四五六七八九'; if(n < 10) return d[n]; var t = Math.floor(n / 10), o = n % 10; return (t > 1 ? d[t] : '') + '十' + (o ? d[o] : ''); }
-function 号の原文(号){
-  // 「令12条1項4号イ」→ 令12条の原文から、その項・号の部分だけを切り出す
-  var m = /^令(\d+)条(?:の(\d+))?第?(\d+)項(?:(\d+)号([イロハニホヘトチリヌ])?)?/.exec(号);
-  if(!m) return null;
-  var k = '令' + m[1] + (m[2] ? '_' + m[2] : ''), t = 条文[k];
-  if(!t) return null;
-  var p = +m[3], s = 0, e = t.length;
-  if(p > 1){ s = t.indexOf('\n' + 全数字[p] + '　'); if(s < 0) return null; }
-  var e2 = t.indexOf('\n' + 全数字[p + 1] + '　', s + 1); if(e2 > 0) e = e2;
-  var seg = t.slice(s, e).replace(/^\n/, '');
-  if(m[4]){
-    var g = +m[4], a = seg.indexOf('\n　' + 漢数(g) + '　');
-    if(a < 0) return seg;
-    var b = seg.indexOf('\n　' + 漢数(g + 1) + '　', a + 1);
-    seg = seg.slice(a + 1, b > 0 ? b : seg.length);
-  }
-  return seg;
 }
 function 号を開く(btn, 号){
   var nx = btn.nextElementSibling;

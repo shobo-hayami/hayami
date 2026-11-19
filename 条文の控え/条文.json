@@ -2815,19 +2815,19 @@
 "法": {
 "name": "消防法",
 "id": "323AC1000000186",
-"fetched": "2026-11-19",
+"fetched": "2026-11-20",
 "url": "https://laws.e-gov.go.jp/law/323AC1000000186"
 },
 "令": {
 "name": "消防法施行令",
 "id": "336CO0000000037",
-"fetched": "2026-11-19",
+"fetched": "2026-11-20",
 "url": "https://laws.e-gov.go.jp/law/336CO0000000037"
 },
 "規": {
 "name": "消防法施行規則",
 "id": "336M50000008006",
-"fetched": "2026-11-19",
+"fetched": "2026-11-20",
 "url": "https://laws.e-gov.go.jp/law/336M50000008006"
 }
 }
