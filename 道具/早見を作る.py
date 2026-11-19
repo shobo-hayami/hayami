@@ -183,6 +183,15 @@ def load_tables(arts):
     return tables, probs, r.returncode == 0, msg
 
 
+def 既存の変わった(arts):
+    """既存の建物の印の根拠の条で、確かめたときから条文が変わったもの（変わっていれば画面は印を「見直し中」にする）"""
+    p = ROOT / "道具" / "既存の印.json"
+    if not p.exists():
+        return ["既存の印.json が無い"]
+    fp = json.loads(p.read_text(encoding="utf-8")).get("指紋", {})
+    return [k for k, h in fp.items() if k not in arts or arts[k]["hash"] != h]
+
+
 def main():
     today = datetime.date.today()
     data = json.loads((STORE / "条文.json").read_text(encoding="utf-8"))
@@ -268,6 +277,7 @@ def main():
                  + ";\nvar 条文=" + json.dumps({k: arts[k]["text"] for t in tables for k in t.get("条", []) if k in arts}, ensure_ascii=False)
                  + ";\nvar 決まり=" + json.dumps([[c["id"], c.get("題", ""), c.get("早見", "")] for c in rules], ensure_ascii=False)
                  + ";\nvar 公開版=" + json.dumps(公開設定, ensure_ascii=False)
+                 + ";\nvar 既存の変わった=" + json.dumps(既存の変わった(arts), ensure_ascii=False)
                  + ";\n" + UI_JS + "</script>")
     fetched = "・".join(f"{v['name']} {v['fetched']}" for v in data["laws"].values())
     if test_ok:
@@ -405,6 +415,7 @@ details.sum summary,details.no summary{padding:12px 4px;font-size:15px}
 .tag.ok{min-height:36px;line-height:24px}
 .note,.jou{font-size:14px}.foot{font-size:13px}.ans .fix{font-size:14px}
 .tag.unknown{font-size:13px}
+.kz{display:block;font-size:12px;color:#666;font-weight:normal}
 </style></head><body>
 <h1>消防用設備の設置基準 早見（条文つき）</h1>
 <div class="disc" style="border:1px solid #c9a227;background:#fffbea;border-radius:6px;padding:8px 10px;margin:6px 0 8px;font-size:.92em;line-height:1.6">この画面は、個人が消防法令の条文を読みやすく整理したもので、国・消防庁・各地の消防本部が作ったものではありません。判定は条文に書かれた条件だけで行い、特例・国の通知・市町村の条例・所轄の消防署の運用は含みません。設計・届出・検査などに使うときは、必ず条文の原文と所轄の消防署で確かめてください。この画面を使って生じた損害について、作った人は責任を負いません。</div>
@@ -572,6 +583,17 @@ function 読み替え(t){
   if(typeof f !== 'number') return '<div class="also">面積の基準は、造りと内装で2〜3倍に読み替える。造りと内装に答えると決まる</div>';
   if(f === 1) return '<div class="also">造りと内装からは読み替えなし（基準の面積のまま判定）</div>';
   return '<div class="also">造り（' + esc(答.構造) + '）と内装により、面積の基準を' + f + '倍に読み替えて判定した（例: 700㎡なら' + (700 * f) + '㎡）</div>';
+}
+// 既存の建物の印（判定の状態は変えない）。要る・まだ決まらない・判定できないのときだけ文を出す
+function 既存のB(r){ return r.既存 && r.既存.印 === 'B' && 見た目(r) === '要る'; }
+function 既存の文(r, st){
+  var m = r.既存; if(!m || ['要る','まだ決まらない','判定できない'].indexOf(st) < 0) return '';
+  if(m.印 === '見直し中') return '<div class="also">前から建っている建物の扱いは、根拠の条文（消防法17条の2の5・令34条など）が変わったので見直し中</div>';
+  var 附 = '基準を変えたときの附則で、期限まで前の基準でよいとしている場合がある。附則はこの早見に入っていない。';
+  var co2 = r.設備 === '特殊消火' ? '<br>二酸化炭素を部屋全体に放出する不活性ガス消火設備は、一部の基準（規則19条5項19号イ(ハ)・(ホ)、19条の2）に限り、前から建っている建物にも今の基準を当てはめる（令34条2号・規則33条の2）。' : '';
+  if(m.印 === 'A') return '<div class="also">' + (m.理由 === '設備' ? 'この設備は、' : 'この用途は特定防火対象物なので、') + '今の基準ができる前から建っている建物にも、今の基準を当てはめる（' + esc(m.根拠) + '）。' + 附 + co2 + '</div>';
+  return '<div class="also">ここに出ているのは今の基準での判定。今の基準ができる前（変わる前）から建っている建物で、設備が今の基準に合わないときは、そのときの基準を当てはめる（消防法17条の2の5第1項）。<br>前の基準でも要る場合がある。この早見は前の基準での判定をしていないので、建った時期と当時の基準を確かめる。' + co2
+    + '<details class="sum"><summary>今の基準になる場合</summary>・基準が変わっていなければ、今の基準のまま。<br>・前の基準にも合っていなかった設備（17条の2の5第2項1号）。<br>・基準が変わった後に着工した増築・改築の部分の床面積の合計が1,000㎡以上、または基準が変わった時の延べ面積の2分の1以上になる建物（同2号・令34条の2）。<br>・基準が変わった後に、主要構造部である壁の過半を修繕・模様替えした建物（同2号・令34条の3）。<br>・今の基準に合うようになった設備（同3号）。<br>・用途を変えた建物は別の決まり（17条の3）。変えた後の用途が特定防火対象物でなければ、変える前の用途の基準を当てはめる場合がある。<br>・市町村の火災予防条例の基準にも同じ決まりがある。</details></div>';
 }
 function 見た目(r){
   // 根拠の条文が変わり、まだ人が確かめていない設備は、判定を出さずに「見直し中」
@@ -791,16 +813,16 @@ function 描く(){
     var 条 = [];
     res.forEach(function(r){ var st = 見た目(r); (st === '要る' ? 要 : st === '要らない' ? (効く注記(r).length ? 条 : 不) : 確).push(r); });
     var 名札 = function(r){ var st = 見た目(r), lab = 見出し(r);
-      return '<button class="rb '+色[st]+'" onclick="進む({画面:\'設備\', 見る:\''+r.設備+'\', 結果から: true})"><b>'+esc(r.設備)+'</b>'+(r.変わった.length ? ' <span class="red">条文が変わった</span>' : '')+'<span class="st">'+lab+' ›</span></button>'; };
+      return '<button class="rb '+色[st]+'" onclick="進む({画面:\'設備\', 見る:\''+r.設備+'\', 結果から: true})"><b>'+esc(r.設備)+'</b>'+(r.変わった.length ? ' <span class="red">条文が変わった</span>' : '')+(既存のB(r) ? '<span class="kz">既存の建物は前の基準の場合あり</span>' : '')+'<span class="st">'+lab+' ›</span></button>'; };
     if(答.部分) h += '<div class="also">複合ビルは、用途ごとの部分を1つの建物とみなして判定する（令9条）。令9条のかっこ書きの号だけ、建物全体で判定している</div><div class="sum">入っている用途（押すと直せる）: <button class="vb" onclick="複合を始める(true)">'+esc(部分の札(答.部分).join('・'))+'</button></div>'
       + (答.用途 === '16イ' && 答.地下 >= 1 ? '<div class="note">地下街と一体を成すと消防長・消防署長が指定した地階は、一部の規定で地下街の部分とみなす（令9条の2）</div>' : '');
-    h += 要約(true) + '<div class="qt">要る設備 '+要.length+'件</div>' + (要.length ? 要.map(名札).join('') : '<div class="note">なし</div>');
+    h += 要約(true) + '<div class="qt">要る設備 '+要.length+'件</div>' + (要.some(既存のB) ? '<div class="note">「前の基準の場合あり」と付いた設備は、今の基準ができる前（変わる前）から建っている建物では、そのときの基準を当てはめる場合がある。押すと出る。</div>' : '') + (要.length ? 要.map(名札).join('') : '<div class="note">なし</div>');
     if(確.length) h += '<div class="qt">自分で確かめるもの '+確.length+'件</div>' + 確.map(名札).join('');
     if(条.length) h += '<div class="qt">条件しだいで要る '+条.length+'件</div><div class="note">質問で聞いていない条件（危険物の量など）があれば要る。押すと条件が出る</div>' + 条.map(名札).join('');
     if(不.length) h += '<details class="no"'+(不を開く?' open':'')+' ontoggle="不を開く=this.open"><summary>要らない '+不.length+'件（押すと名前が開く）</summary>'+不.map(名札).join('')+'</details>';
     h += '<div class="sub">' + ボタン('答えを見直す', "進む({画面:'見直す'})", 'lite') + ボタン('設備以外の決まり', "進む({画面:'決まり'})", 'lite') + ボタン('結果を写す（コピー）', '写す()', 'lite') + '</div>';
     if(公開版.公開 && 公開版.知らせ先) h += '<a class="nb lite" href="'+esc(公開版.知らせ先)+'" target="_blank" rel="noopener">誤りを知らせる（名前・連絡先・建物の名前や住所は書かない。個別の相談には答えない）</a>';
-    h += '<div class="foot">これは条文の案内で、個別の建物の判断ではない。市町村の火災予防条例・消防長等の特例・既存の建物の扱い・施行前の改正は入っていない。最終の判断は管轄の消防署へ。<br>' + esc(document.querySelector('.meta').textContent) + '</div>';
+    h += '<div class="foot">これは条文の案内で、個別の建物の判断ではない。市町村の火災予防条例・消防長等の特例・施行前の改正は入っていない。前から建っている建物の扱いは印と注意書きだけで、前の基準での判定は入っていない。最終の判断は管轄の消防署へ。<br>' + esc(document.querySelector('.meta').textContent) + '</div>';
   } else if(g.画面 === '見直す'){
     h += '<div class="qt">答えを見直す</div><div class="note">押した質問だけ答え直す。ほかの答えは残る</div>';
     if(答.部分) h += '<div class="ans" onclick="複合を始める(true)">入っている用途と床面積 <b>'+esc(部分の札(答.部分).join('・'))+'</b> <span class="fix">直す</span></div>';
@@ -845,6 +867,7 @@ function 描く(){
         + (r.変わった.length ? '<div class="band red">条文が変わった・要再確認（'+esc(r.変わった.join('・'))+'）</div>' : '')
         + '<div class="why">'+why+'</div>'
         + (st === '要る' && r.候補.length ? '<div class="cand">付けなくてよくなる場合: '+r.候補.map(esc).join(' ／ ')+'</div>' : '')
+        + 既存の文(r, st)
         + (function(){ var ns = 効く注記(r); if(!ns.length) return ''; var tx = ns.map(function(y){ return esc(y.理由); }).join(' ／ ');
             return st === '要る' ? '<details class="sum"><summary>ほかに確かめること '+ns.length+'件</summary>'+tx+'</details>' : '<div class="also">こうなら要る・あわせて確かめること: '+tx+'</div>'; })() + '</div>';
     }
@@ -876,11 +899,14 @@ function 写す(){
   var lines = ['消防用設備のチェック（' + new Date().toLocaleDateString('ja-JP') + '）', '用途: ' + 用途の名[g.用途] + (g.設備 ? '（調べた設備: ' + 調べた.join('・') + '）' : '')];
   if(答.部分) lines.push('入っている用途: ' + 部分の札(答.部分).join('・'));
   答えたid().forEach(function(id){ if(!自動で入れた[id]) lines.push(質問を引く(id, 答).文 + ' ' + 見せる値(答[id])); });
+  var 既存あり = false;
   var 順 = {"要る":0,"まだ決まらない":1,"判定できない":1,"見直し中":1,"要らない":2};
   var 写す表 = g.設備 && 調べた.length ? 表たち.filter(function(t){ return 調べた.indexOf(t.設備) >= 0; }) : 対象();
   全部を判定(写す表, 答).sort(function(x, y){ return 順[見た目(x)] - 順[見た目(y)]; }).forEach(function(r){
-    lines.push('■' + r.設備 + ': ' + 見出し(r) + (r.要る.length ? '（' + r.要る.map(function(x){ return (x.どこ ? x.どこ + ' ' : '') + x.号; }).join('・') + '）' : '') + (見た目(r) === '要らない' && 効く注記(r).length ? ' ※' + 効く注記(r).map(function(y){ return y.理由; }).join('／') : ''));
+    lines.push('■' + r.設備 + ': ' + 見出し(r) + (r.要る.length ? '（' + r.要る.map(function(x){ return (x.どこ ? x.どこ + ' ' : '') + x.号; }).join('・') + '）' : '') + (見た目(r) === '要らない' && 効く注記(r).length ? ' ※' + 効く注記(r).map(function(y){ return y.理由; }).join('／') : '') + (既存のB(r) ? ' ※既存の建物は従前の基準の場合あり（法17条の2の5）' : ''));
+    if(既存のB(r)) 既存あり = true;
   });
+  if(既存あり) lines.push('判定は今の基準。従前の基準での判定はしていない。');
   lines.push('最終判断は条文の原文と所轄の運用。' + document.querySelector('.meta').textContent);
   var t = lines.join('\n');
   function 見せる(msg){
