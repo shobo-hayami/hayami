@@ -1,10 +1,12 @@
 # 毎月1〜4日の朝9時（日本時間）に、条文を確かめて公開の画面を更新する。AIは使わない。
-# 今月もう確かめ終えていれば、2日目以降は何もしない。
+# 今月もう確かめ終えていれば、2日目以降は何もしない。置き場へ上げたときも動き、手元で作った公開の画面をそのまま出す。
 name: monthly-law-check
 on:
   schedule:
     - cron: "0 0 1-4 * *"
   workflow_dispatch:
+  push:
+    branches: [main]
 permissions:
   contents: write
   pages: write
