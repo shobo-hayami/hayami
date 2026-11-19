@@ -25,7 +25,7 @@ function 練習の表を出す(p){
   if(a.部分) h += '<div class="pr"><b>用途</b><span>複合ビル（用途が2つ以上）</span></div><div class="pr"><b>入っている用途</b><span>' + esc(部分の札(a.部分).join('・')) + '</span></div>';
   else { var nn = 番号と名(a.用途); h += '<div class="pr"><b>用途</b><span>' + nn[0] + ' ' + nn[1] + '</span></div>'; }
   練守る(function(){ return 練習の表(p.例); }).forEach(function(x){ h += '<div class="pr" onclick="練習の行を開く(this, \'' + x.id + '\')"><b>' + esc(x.名) + '</b><span>' + esc(x.値) + '</span></div>'; });
-  return h + '</div><div class="note">行を押すと、その値を早見で聞くときの質問の文が開く</div>';
+  return h + '</div><div class="note">行を押すと、質問の文が開く</div>';
 }
 function 練習の行を開く(el, id){
   var nx = el.nextElementSibling; if(nx && nx.classList.contains('inline')){ nx.remove(); return; }
@@ -55,13 +55,12 @@ function 練習を開く(pos, i){
 function 練習に戻る(){ var i = -1; 道.forEach(function(x, j){ if(x.画面 === '練答') i = j; }); if(i >= 0) 何段か戻る(道.length - 1 - i); }
 function 練見出し(r, a){ var k = 答; 答 = a; var s = 見出し(r), ns = 効く注記(r); 答 = k; return [s, ns]; }
 function 練原文(号){ return '<button class="vb" onclick="号を開く(this, \'' + esc(号) + '\')">' + esc(号) + 'の原文</button>'; }
-function 練習の決まり文(){ return '<div class="foot">これは条文の案内で、個別の建物の判断ではない。市町村の火災予防条例・消防長等の特例・施行前の改正は入っていない。前から建っている建物の扱いは印と注意書きだけで、前の基準での判定は入っていない。最終の判断は管轄の消防署へ。</div>'; }
+function 練習の決まり文(){ return '<div class="foot">条文の案内で、実際の建物の判断ではない。最終の判断は管轄の消防署へ。</div>'; }
 function 練習の画面(g){
   var h = '';
   if(g.画面 === '練入口'){
     h += '<div class="qt">練習問題</div><div class="note">建物の例を見て、設備が要るか要らないかを答える。答え合わせで、当たった号と条文の原文を読む。</div>';
-    h += '<div class="also">練習用に作った建物で、実在の建物ではない。<br>答えは、消防法施行令などの条文に書かれた条件だけで出している。市町村の火災予防条例・特例・国の通知・所轄の消防署の運用は入っていない。<br>今の基準での答え。前から建っている建物を、前の基準で判定することはしていない。<br>条文だけでは決まらない建物（駐車場の部分がある建物など）は、問題に入れていない。<br>実際の建物の判断は、条文の原文と管轄の消防署で確かめる。記録はこの画面を閉じると消える。どこにも送らない。</div>';
-    h += '<div class="note">用途・収容人員・無窓階かどうかは、問題に書いた値をそのまま使う。実際の建物では、これを決めるところから始まる。</div>';
+    h += '<div class="also">練習用に作った建物。答えは今の条文の条件だけで出していて、条例・特例は入っていない。<br>記録は画面を閉じると消える。どこにも送らない。</div>';
     if(練習.段 && Object.keys(練習.記録).length && 練習.位置 < 練習.並び.length){
       var pc = 練習の今(練習.位置);
       h += ボタン('続きから（' + esc(練習の段[pc.段].名) + ' ' + pc.番号 + '番）', "進む({画面:'練問', 位置:" + 練習.位置 + "})", 'go') + ボタン('記録を消してはじめから', '練習 = {段:null, 並び:[], 位置:0, 下書き:{}, 記録:{}}; 描く();', 'lite');
@@ -85,12 +84,12 @@ function 練習の画面(g){
       if(done) h += '<div class="ans">あなたの答え <b>' + esc(練習の数(done.答) + u) + '</b></div>' + ボタン('答え合わせを見る', "進む({画面:'練答', 位置:" + g.位置 + "})", 'go');
       else h += '<div class="q"><div id="err" class="err"></div><input id="in_line" type="number" inputmode="decimal" min="0" onkeydown="if(event.key===\'Enter\')練習の線を答える()"><button class="b go" onclick="練習の線を答える()">決める</button></div>' + ボタン('この問題をとばす', '練習の次()', 'lite');
     } else {
-      h += '<div class="qt">この建物に、次の設備は要る？</div><div class="note">今の基準で、条文に書かれた条件だけで答える。<br>書いていないもの（温泉をくみ上げる設備、同じ敷地の別の建物など）は、無いものとして答える。</div>' + 練習の表を出す(p);
+      h += '<div class="qt">この建物に、次の設備は要る？</div><div class="note">書いていないもの（温泉の設備、同じ敷地の別の建物など）は、無いものとして答える。</div>' + 練習の表を出す(p);
       p.行.forEach(function(r, i){
         var v = done ? done.答[r.設備] : d[r.設備];
         h += '<div class="prow"><div class="pn">' + esc(練習の設備名(r.設備)) + '</div>' + ['要る', '要らない'].map(function(s2){ return '<button class="b' + (v === s2 ? ' was' : '') + '"' + (done ? ' disabled' : '') + ' onclick="練習で選ぶ(' + i + ',\'' + s2 + '\')">' + s2 + '</button>'; }).join('') + '</div>';
       });
-      h += '<div class="note">ここに無い設備が要らないという意味ではない</div>';
+      h += '<div class="note">ここに無い設備は、聞いていないだけ</div>';
       var all = p.行.every(function(r){ return (done ? done.答 : d)[r.設備]; });
       if(done) h += ボタン('答え合わせを見る', "進む({画面:'練答', 位置:" + g.位置 + "})", 'go');
       else h += (all ? ボタン('答え合わせ', '練習の答え合わせ()', 'go') : '<div class="note">全部の設備に答えると、答え合わせが押せる</div>') + ボタン('この問題をとばす', '練習の次()', 'lite');
@@ -106,7 +105,7 @@ function 練習の画面(g){
       h += '<div class="rr ' + (rec.合 ? '' : 'bad') + '"><div class="rh"><b>' + esc(練習の設備名(p.設備)) + '</b><span>' + (rec.合 ? '○ 合っている' : '× 違う') + '</span></div>'
         + '<div class="why">あなたの答え: ' + esc(練習の数(rec.答) + u) + '<br>条文の条件での線: ' + esc(練習の数(m.線) + u) + '<br>' + esc(境目の文(m)) + '</div>' + 練原文(m.号) + '</div>';
       h += ボタン('この設備を早見で開く', '練習を開く(' + g.位置 + ', 0)', 'lite');
-      h += '<div class="note">線は、ほかの答えを変えずに、その値だけが増えた場合。増築で階数・無窓階・収容人員が一緒に変わるときは、答えを入れ直して判定する。</div>';
+      h += '<div class="note">線は、ほかの値を変えずに、その値だけが増えた場合。</div>';
     } else {
       var 並 = p.行.map(function(row, i){ return { row: row, i: i, ok: rec.答[row.設備] === row.期待 }; });
       並.sort(function(x, y){ return (x.ok ? 1 : 0) - (y.ok ? 1 : 0) || x.i - y.i; });
@@ -131,7 +130,7 @@ function 練習の画面(g){
     h += '<div class="qt">まとめ</div>';
     h += '<div class="ans">答えた ' + 設.length + '問・設備 ' + sum(設, '個') + '個のうち 合った ' + sum(設, '合') + '個</div>';
     if(線.length) h += '<div class="ans">線を答える ' + 線.length + '問のうち 合った ' + sum(線, '合') + '問</div>';
-    h += '<div class="note">合った数は、条文の条件を読めた数。実際の建物の判断ができることを示すものではない。</div>';
+    h += '<div class="note">合った数は、条文を読めた数。</div>';
     var 違 = 記.filter(function(r){ return r.合 < r.個; });
     if(違.length){ h += '<div class="step">違った問題（押すと答え合わせ）</div>'; 違.forEach(function(r){ h += '<button class="vb" onclick="練習.段 = \'' + r.段 + '\'; 練習.並び = [' + r.idx + ']; 進む({画面:\'練答\', 位置: 0});">' + esc(練習の段[r.段].名 + ' ' + r.番号) + '</button>'; }); }
     var 同 = 違.filter(function(r){ return r.段 === 練習.段; });
