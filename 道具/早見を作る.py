@@ -432,10 +432,10 @@ details.sum summary,details.no summary{padding:12px 4px;font-size:15px}
 .kz{display:block;font-size:12px;color:#666;font-weight:normal}
 </style></head><body>
 <h1>消防用設備の設置基準 早見（条文つき）</h1>
-<div class="disc" style="border:1px solid #c9a227;background:#fffbea;border-radius:6px;padding:8px 10px;margin:6px 0 8px;font-size:.92em;line-height:1.6">この画面は、個人が消防法令の条文を読みやすく整理したもので、国・消防庁・各地の消防本部が作ったものではありません。判定は条文に書かれた条件だけで行い、特例・国の通知・市町村の条例・所轄の消防署の運用は含みません。設計・届出・検査などに使うときは、必ず条文の原文と所轄の消防署で確かめてください。この画面を使って生じた損害について、作った人は責任を負いません。</div>
 <div class="meta">まとめ %N%枚／画面を作った日 %BUILT%／条文を取った日 %FETCHED%<br>%SOURCE%</div>
 %MAIN%
 <div id="cards" class="%CARDCLS%">%CARDS%</div>
+<div class="disc" style="border-top:1px solid #ccc;margin:16px 0 8px;padding-top:8px;font-size:13px;color:#555;line-height:1.6">個人が条文を読みやすく整理したもので、国・消防庁・消防本部が作ったものではない。判定は条文の条件だけで、特例・国の通知・条例・所轄の運用は入っていない。使うときは条文の原文と所轄の消防署で確かめる。この画面で生じた損害に、作った人は責任を負わない。</div>
 <script>
 function filter(){
   var w=document.getElementById('q').value.trim().split(/\\s+/).filter(Boolean);
