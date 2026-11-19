@@ -59,5 +59,28 @@ for (const e of 例題.concat(境目の例.map(x => ({ 名前: x.名前, 答え:
     if (s1 === "要らない") { ng++; console.log(`違う: 境目の総当たり ${e.名前} / ${r.設備}: ${m.名}を${m.線}にしても要らない`); }
   }
 }
+// 足した質問が、出てよい建物にしか出ないこと（答えの無い値は「わからない」で最後まで回す）
+const 出てよい = {
+  省令部分: u => /^6イ[12]$|^6ロ/.test(u), 床_舞台部: u => /^1[イロ]/.test(u), 舞台_地階無窓4階: u => /^1[イロ]/.test(u), ラック10m超: u => u === "14",
+  床特_準地下街: u => u === "16の3", 指可倍_全部: (u, a) => a.危険物類 === true, 指可倍_液除く: (u, a) => a.危険物類 === true,
+  収容_無窓3階以上地階最大: u => /^12|^15$/.test(u), 床特_4以上_二四階: u => u === "16イ", 地下街_六項イロ: u => u === "16の2", 地下街_自火報の部分: u => u === "16の2"
+};
+let 出た数 = 0;
+for (const e of 例題) {
+  const a = JSON.parse(JSON.stringify(e.答え)); let q, k = 0; // 例題の答えは残し、無い値は「わからない」
+  while ((q = J.次の質問(表たち, a)) && k < 80) { k++;
+    const base = q.元 || q.id, use = q.部分 !== undefined ? a.部分[q.部分].用途 : a.用途;
+    if (出てよい[base]) { 出た数++; n++; if (!出てよい[base](use, a)) { ng++; console.log(`違う: 出てはいけない質問 ${e.名前}: ${q.id}`); } }
+    a[q.id] = J.不明;
+  }
+}
+// 出ないはずの質問が出ない
+for (const [名, id] of [["決める: 病院2050・耐火難燃・省令部分は聞かない", "省令部分"], ["決める: 劇場250・舞台部は聞かない", "床_舞台部"], ["決める: 指定可燃物600倍・液除くは聞かない", "指可倍_液除く"]]) {
+  const e = 例題.find(x => x.名前 === 名); n++;
+  if (!e) { ng++; console.log("違う: 例題が無い " + 名); continue; }
+  const a = JSON.parse(JSON.stringify(e.答え)); delete a[id]; let q, k = 0, hit = false;
+  while ((q = J.次の質問(表たち, a)) && k < 80) { k++; if (q.id === id) hit = true; a[q.id] = q.id in e.答え ? e.答え[q.id] : J.不明; }
+  if (hit) { ng++; console.log(`違う: 出ないはずの質問が出た ${名}: ${id}`); }
+}
 console.log(`例題 ${例題.length}件・境目 ${境目の例.length}件（線ちょうどで変わるか ${境目を試した}件）・見た答え ${n}個・違い ${ng}個`);
 process.exit(ng ? 1 : 0);
