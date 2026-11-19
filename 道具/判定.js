@@ -270,7 +270,59 @@ function 設備を判定(表, a) {
     できない.push({ 号: 表.条[0] + "の" + 表.未収録.join("・") + "号", 理由: "判定表にまだ入れていない号がある" });
   }
   要る.forEach(function (r) { if (r.候補 && 候補.indexOf(r.候補) < 0) 候補.push(r.候補); });
-  return { 設備: 表.設備, 状態: 状態, 要る: 要る, 待ち: 待ち, できない: できない, 注記: 注記, 候補: 候補, 札: 表.札, 変わった: 表.変わった || [], 内訳: 内訳, 既存: 既存の印(表.設備, a.用途) };
+  return { 設備: 表.設備, 状態: 状態, 要る: 要る, 待ち: 待ち, できない: できない, 注記: 注記, 候補: 候補, 札: 表.札, 変わった: 表.変わった || [], 内訳: 内訳, 既存: 既存の印(表.設備, a.用途), 境目: 状態 === "要らない" ? 境目を出す(表, a) : null };
+}
+
+// ---- 境目までの距離: 「要らない」の設備に、ほかの答えを変えずにその値だけ増えたら「要る」になる線を出す。状態は変えない ----
+var 切替の名 = ["宿泊", "介助主", "火気", "平屋以外", "鉄網", "契約50超", "高さ31超", "直通1", "特定_避難階以外", "危険物類", "下階特定"];
+var 近いの切り = 0.3; // 残りが線の3割以内を「近い」とする（仮の値。使ってみて直す）
+function 行の境目(表, row0, a, どこ) {
+  if (!用途に当たる(row0.用途, a.用途) || (row0.結果 && row0.結果 !== "要る")) return null;
+  var row = row0;
+  if (/^6イ[12]$|^6ロ/.test(a.用途) && ((表.設備 === "屋内消火栓" && row.号 === "令11条1項2号") || row.倍特例)) row = Object.assign({}, row, { 特例: true });
+  var F = [], U = [];
+  row.条件.forEach(function (c) { var r = 条件を見る(c, a, row); if (r.r === false) F.push(c); else if (r.r !== true) U.push(c); });
+  if (F.length !== 1) return null; // 2つ以上外れた行は、その値だけ増えても要るにならない
+  if (U.length) return { 未: true, 号: row.号, 名: U.map(function (c) { return c[0]; }), どこ: どこ };
+  var c = F[0], name = c[0], op = c[1], v = c[2];
+  if (op === "==") return (v === true && 切替の名.indexOf(name) >= 0 && (name !== "下階特定" || a._親)) ? { 種: "切替", 名: name, 号: row.号, どこ: どこ } : null;
+  if (op === "<") return null; // 減らすと要るになる線は出さない
+  var x = 値(a, name);
+  if (typeof x !== "number") return null; // 部分の値を聞かずに決まったときなど、今の値が分からない
+  var L = v, 種 = "数", 倍 = null;
+  if (op === ">=倍") { 倍 = 倍率(a); L = v * 倍; if (row.特例 && 倍 > 1) { L = Math.min(L, 1000); 種 = "場合あり"; } }
+  if (op === ">") 種 = "超";
+  for (var i = 0; i < row.条件.length; i++) { var d = row.条件[i]; if (d !== c && d[0] === name && d[1] === "<" && !(L < d[2])) return null; }
+  return { 種: 種, 名: name, 今: x, 線: L, あと: L - x, 比: L ? (L - x) / L : 1, 倍: 倍, 元: v, 号: row.号, 範囲: row.範囲, 理由: row.理由, どこ: どこ };
+}
+function 境目を出す(表, a) {
+  var out = [];
+  function 足す(x) { if (!x) return; var k = [x.種, x.名, x.線, x.号, x.どこ].join("|"); if (!out.some(function (y) { return [y.種, y.名, y.線, y.号, y.どこ].join("|") === k; })) out.push(x); }
+  if (!複合か(a)) 表.行.forEach(function (r) { 足す(行の境目(表, r, a)); });
+  else {
+    表.行.filter(function (r) { return r.令9; }).forEach(function (r) { 足す(行の境目(表, r, a, "建物全体")); });
+    a.部分.forEach(function (p, i) {
+      var o = 部分の答(a, i);
+      表.行.filter(function (r) { return !r.令9; }).forEach(function (r) {
+        var x = 行の境目(表, r, o, 部分の名(a, i) + "の部分");
+        if (x && !x.未 && 引き継ぐ.concat(["平屋以外"]).indexOf(x.名) >= 0) x.どこ = "建物全体"; // 建物から引き継ぐ値は1本にまとめる
+        足す(x);
+      });
+    });
+    // すき間: 全部の用途にかかる号を建物全体の値でも見る（越えると「判定できない」に変わる）
+    表.行.filter(function (r) { return !r.令9 && r.結果 === "要る" && r.用途.indexOf("*") >= 0; }).forEach(function (r) { var x = 行の境目(表, r, a, "建物全体"); if (x && !x.未 && x.種 !== "切替") { x.すき間 = true; 足す(x); } });
+  }
+  var 未 = out.filter(function (x) { return x.未; }), 切替 = [], 数 = [];
+  out.forEach(function (x) { if (x.未) return; if (x.種 === "切替") { if (!切替.some(function (y) { return y.名 === x.名 && y.どこ === x.どこ; })) 切替.push(x); } else 数.push(x); });
+  // 主の線: 今の値が0でない数の線。同じ値の線は一番低いものだけ。線に対する残りの割合が小さい順
+  var 候補 = 数.filter(function (x) { return !x.すき間 && x.今 > 0 && (x.種 === "数" || x.種 === "場合あり"); });
+  候補 = 候補.filter(function (x) { return !候補.some(function (y) { return y !== x && y.名 === x.名 && y.どこ === x.どこ && y.線 < x.線; }); });
+  候補.sort(function (p, q) { return p.比 - q.比; });
+  var 主 = 候補[0] || null;
+  var 近すき間 = 数.filter(function (x) { return x.すき間 && x.今 > 0 && (!主 || x.比 < 主.比); });
+  var ほか = 数.filter(function (x) { return x !== 主 && 近すき間.indexOf(x) < 0; });
+  if (!主 && !近すき間.length && !切替.length && !ほか.length && !未.length) return null;
+  return { 主: 主, すき間: 近すき間, 切替: 切替, ほか: ほか, 未: 未, 近い: !!(主 && 主.比 <= 近いの切り) };
 }
 
 // ---- 既存の建物の印（消防法17条の2の5・令34条・令34条の4）。判定の状態は変えない ----
