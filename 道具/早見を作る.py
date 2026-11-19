@@ -271,14 +271,23 @@ def main():
     rows = rows + rules_html
     if test_ok:
         rows = rules_html  # 用途別の基準は判定の表の中に重ねて出す
-        js = (ROOT / "道具" / "判定.js").read_text(encoding="utf-8")
+        js = (ROOT / "道具" / "判定.js").read_text(encoding="utf-8") + "\n" + (ROOT / "道具" / "語.js").read_text(encoding="utf-8")
+        # 練習問題: 試験に通ったときだけ入口を出す（落ちても早見の本体は出す）
+        import subprocess
+        rp = subprocess.run(["node", str(ROOT / "道具" / "試験_練習.js")], capture_output=True, encoding="utf-8", errors="replace")
+        練習あり = rp.returncode == 0
+        test_msg += " / " + ((rp.stdout.strip().splitlines() or ["練習問題の試験が動かなかった"])[-1])
+        if not 練習あり:
+            problems.append("練習問題の試験に失敗。練習問題の入口は出していない: " + rp.stdout.strip().replace("\n", " / ")[:300])
+        js += "\n" + (ROOT / "道具" / "練習.js").read_text(encoding="utf-8")
+        js += "\nvar 練習あり=" + ("true" if 練習あり else "false") + ";\nvar 練習の例題=" + (ROOT / "道具" / "例題.json").read_text(encoding="utf-8").strip() + ";\nvar 練習の境目=" + (ROOT / "道具" / "例題_境目.json").read_text(encoding="utf-8").strip() + ";"
         judge = ("<script>" + js + "\nvar 表たち=" + json.dumps(tables, ensure_ascii=False) + ";\n" + "var 設備の順=" + json.dumps(EQUIP, ensure_ascii=False) + ";\nvar 基準=" + json.dumps(基準, ensure_ascii=False)
                  + ";\nvar 用途の名=" + json.dumps(dict(USES), ensure_ascii=False)
                  + ";\nvar 条文=" + json.dumps({k: arts[k]["text"] for t in tables for k in t.get("条", []) if k in arts}, ensure_ascii=False)
                  + ";\nvar 決まり=" + json.dumps([[c["id"], c.get("題", ""), c.get("早見", "")] for c in rules], ensure_ascii=False)
                  + ";\nvar 公開版=" + json.dumps(公開設定, ensure_ascii=False)
                  + ";\nvar 既存の変わった=" + json.dumps(既存の変わった(arts), ensure_ascii=False)
-                 + ";\n" + UI_JS + "</script>")
+                 + ";\n" + (ROOT / "道具" / "練習_画面.js").read_text(encoding="utf-8") + "\n" + UI_JS + "</script>")
     fetched = "・".join(f"{v['name']} {v['fetched']}" for v in data["laws"].values())
     if test_ok:
         main, cardcls = '<div id="app"></div>', "app"
@@ -415,6 +424,11 @@ details.sum summary,details.no summary{padding:12px 4px;font-size:15px}
 .tag.ok{min-height:36px;line-height:24px}
 .note,.jou{font-size:14px}.foot{font-size:13px}.ans .fix{font-size:14px}
 .tag.unknown{font-size:13px}
+.ptbl{border:1px solid #ccc;border-radius:6px;margin:6px 0;background:#fff}
+.ptbl .pr{display:flex;justify-content:space-between;gap:8px;padding:7px 8px;border-bottom:1px solid #eee;cursor:pointer;font-size:14px}
+.ptbl .pr b{font-weight:normal;color:#444}.ptbl .pr span{font-weight:bold;text-align:right}
+.prow{margin:12px 0;padding:6px 0;border-bottom:1px solid #eee}.prow .pn{font-size:15px;margin-bottom:4px}.prow .b{min-height:44px;min-width:110px}
+.rr.bad{outline:3px solid #000}.rr details summary{list-style:none;cursor:pointer}
 .kz{display:block;font-size:12px;color:#666;font-weight:normal}
 </style></head><body>
 <h1>消防用設備の設置基準 早見（条文つき）</h1>
@@ -472,7 +486,7 @@ var 下書き = [];
 function 足せる(c){ return c !== '複合' && parseFloat(項(c)) <= 15 && !/の/.test(項(c)); }
 function 短い名(code){ var t = 用途の名[code].split(' ').slice(1).join(' '), m = /^[^・／（]+/.exec(t); return m && m[0].length < t.length ? m[0] + 'など' : t; }
 function 部分の札(ps){ return ps.map(function(p){ return 用途の名[p.用途].split(' ')[0] + ' ' + 短い名(p.用途) + ' ' + p.延べ + '㎡'; }); }
-function 複合を始める(直す){ 下書き = 直す && 答.部分 ? 答.部分.map(function(p){ return Object.assign({}, p); }) : []; 進む({画面:'複合', 用途:null, 部分:null, 設備:null, 足す:false, 直す: !!直す}); }
+function 複合を始める(直す){ 下書き = 直す && 答.部分 ? 答.部分.map(function(p){ return Object.assign({}, p); }) : []; 進む({画面:'複合', 用途:null, 部分:null, 設備:null, 足す:false, 直す: !!直す, 練習から:false}); }
 function 複合へ戻る(){ var i = -1; 道.forEach(function(x, j){ if(x.画面 === '複合') i = j; }); if(i >= 0) 何段か戻る(道.length - 1 - i); }
 function 部分を直す(i){ 進む({画面:'部分の面積', 足す用途: 下書き[i].用途, 何番: i}); }
 function 部分を消す(i){ 下書き.splice(i, 1); 描く(); }
@@ -506,8 +520,6 @@ function 始める(e, keep){
   else 進む({画面:'結果', 設備: e});
 }
 var 言い換え = {"保育園": "保育所", "ぼうかかんり": "防火管理", "老人ホーム": "老人ホーム", "グルホ": "グループホーム", "デイ": "デイサービス"};
-var 語の名 = {延べ:'延べ面積', 地上:'地上の階数', 地下:'地階の階数', 床_地階無窓:'地階・無窓階の床面積', 床_3階:'3階の床面積', 床_4以上:'4〜10階の床面積', 床_11以上:'11階以上の床面積', 収容_3階以上地階最大:'3階以上・地階で一番多い階の収容人員', 収容_直通1階:'階段が1つの階の収容人員', 危険物類:'少量危険物・指定可燃物', 収容:'収容人員', 収容_地階無窓:'地階・無窓階の収容人員', 収容_階最大:'一番多い階の収容人員', 延べ_地上:'地階を除く延べ面積', 床_地階合計:'地階の床面積の合計', 床_1と2階:'1階と2階の床面積の合計', 敷地:'敷地の面積', 高さ31超:'高さ31m超', 特殊部分:'駐車場・電気室などの部分', 鉄網:'ラスモルタルなどの壁・床・天井', 契約50超:'契約電流50A超', 宿泊:'入居・宿泊', 介助主:'介助が要る人が主', 火気:'火を使う設備', 直通1:'直通階段が1つ', 構造:'造り', 内装:'内装が難燃', 平屋以外:'平屋でない', 特定_避難階以外:'特定用途の部分が3階以上か地階にある', 床23_地階無窓:'地階・無窓階の二項・三項の部分', 床特_地階無窓:'地階・無窓階の特定用途の部分', 床特_4以上:'4〜10階の特定用途の部分', 床特_地階合計:'地階の特定用途の部分の合計', 下階特定:'下の階に一項〜四項などの部分', 特定面積:'特定用途の部分の合計', 二三面積:'二項・三項の部分の合計', 二三あり:'二項か三項の部分がある', 二四あり:'二項か四項の部分がある', 一項あり:'一項の部分がある', 省令部分:'手術室などの区画した部分', 床_舞台部:'舞台部の床面積', 舞台_地階無窓4階:'舞台が地階・無窓階・4階以上', ラック10m超:'天井10m超のラック式倉庫', 床特_準地下街:'特定用途の部分の合計', 指可倍_全部:'指定可燃物の倍数', 指可倍_液除く:'指定可燃物の倍数（可燃性液体類を除く）', 収容_無窓3階以上地階最大:'地階・3階以上の無窓階で一番多い階の収容人員', 床特_4以上_二四階:'二項・四項のある4〜10階の特定用途の部分', 地下街_六項イロ:'地下街に六項イ(1)(2)・ロの部分', 地下街_自火報の部分:'地下街に二項ニ・五項イなどの部分'};
-var 語の単位 = {省令部分:'㎡', 床_舞台部:'㎡', 床特_準地下街:'㎡', 床特_4以上_二四階:'㎡', 指可倍_全部:'倍', 指可倍_液除く:'倍', 収容_無窓3階以上地階最大:'人', 床23_地階無窓:'㎡', 床特_地階無窓:'㎡', 床特_4以上:'㎡', 床特_地階合計:'㎡', 特定面積:'㎡', 二三面積:'㎡', 床_11以上:'㎡', 収容_3階以上地階最大:'人', 収容_直通1階:'人', 延べ:'㎡',床_地階無窓:'㎡', 床_3階:'㎡', 床_4以上:'㎡', 延べ_地上:'㎡', 床_地階合計:'㎡', 床_1と2階:'㎡', 敷地:'㎡', 地上:'階', 地下:'階', 収容:'人', 収容_地階無窓:'人', 収容_階最大:'人'};
 function 条件の文(c){
   var f = c[0], op = c[1], v = c[2];
   var nm = f.indexOf('max:') === 0 ? f.slice(4).split(',').map(function(x){ return 語の名[x] || x; }).join('・') + 'のどれか' : (語の名[f] || f);
@@ -556,7 +568,7 @@ function 確かめる(文, 進める文, fn){
   box.innerHTML = '<div class="also">' + esc(文) + '</div><button class="b go" onclick="var f = 待ちの確かめ; 待ちの確かめ = null; f();">' + esc(進める文) + '</button><button class="b" onclick="this.parentElement.remove()">やめる</button>';
   box.scrollIntoView({block: 'center'});
 }
-function 最初から(はい){ if(!はい && Object.keys(答).length > 1){ 確かめる('入れた答えを全部消して、最初の画面に戻る？', '消して最初に戻る', function(){ 最初から(true); }); return; } 答 = {}; 自動で入れた = {}; 進む({画面:'大', 大:null, 中:null, 用途:null, 部分:null, 足す:false, 直す:false, 設備:null, 調べ方:null}); }
+function 最初から(はい){ if(/^練/.test(今().画面) || 今().練習から) はい = true; if(!はい && Object.keys(答).length > 1){ 確かめる('入れた答えを全部消して、最初の画面に戻る？', '消して最初に戻る', function(){ 最初から(true); }); return; } 答 = {}; 自動で入れた = {}; 進む({画面:'大', 大:null, 中:null, 用途:null, 部分:null, 足す:false, 直す:false, 設備:null, 調べ方:null, 練習から:false}); }
 window.addEventListener('popstate', function(e){ var n = e.state && e.state.n ? e.state.n : 1; if(n < 道.length){ 道.length = n; } 描く(); window.scrollTo(0, 今().y || 0); });
 function 要の名前(ns){
   var out = [];
@@ -634,7 +646,7 @@ function 見た目(r){
 function 用途を決める(code){
   if(今().足す){ 進む({画面:'部分の面積', 足す用途: code, 何番: null}); return; }
   if(/^16[イロ]$/.test(code)){ 複合を始める(); return; }
-  答 = {用途: code}; 自動で入れた = {}; 進む({画面:'調べ方', 用途: code, 部分: null, 設備: null});
+  答 = {用途: code}; 自動で入れた = {}; 進む({画面:'調べ方', 用途: code, 部分: null, 設備: null, 練習から: false});
 }
 // 答えたものを、質問の順（建物 → 部分ごと）に並べる
 function 答えたid(){
@@ -765,6 +777,7 @@ function 描く(){
     else h += ボタン('言葉で探す（例: カラオケ・保育園・防火管理者）', "進む({画面:'探す'})", 'lite') + '<div class="qt">建物の用途は？</div>';
     大分類.forEach(function(x, i){ if(g.足す && x[1] && !x[1].some(足せる)) return; h += ボタン(esc(x[0]), "進む({画面:'中', 大:"+i+", 中:null})"); });
     h += '<div class="sub">' + ボタン('項の番号で選ぶ', "進む({画面:'番号', 番号:null})", 'lite') + '</div>';
+    if(練習あり && !g.足す) h += '<div class="sub">' + ボタン('練習問題（建物の例で、要る設備を答える）', "進む({画面:'練入口', 用途:null, 部分:null, 設備:null, 見る:null, 練習から:false})", 'lite') + '</div>';
   } else if(g.画面 === '中'){
     var 組 = 大分類[g.大];
     if(組[1] === null && g.中 === null){
@@ -925,6 +938,8 @@ function 描く(){
       h += '<div class="step">下はこの設備の札（まとめ）</div>';
     }
   }
+  if(/^練/.test(g.画面)) h += 練習の画面(g);
+  if(g.練習から && g.画面 === '設備') h = h.replace('<div class="top">', '<div class="also">練習問題の建物を開いている ' + ボタン('練習問題に戻る', '練習に戻る()', 'lite') + '</div><div class="top">');
   document.getElementById('app').innerHTML = h;
   var s2 = document.getElementById('q2'); if(s2){ if(g.語){ s2.value = g.語; 探す(); } else s2.focus(); }
 }
