@@ -439,7 +439,7 @@ var 大分類 = [
   ["福祉・保育", null],
   ["学校・文化", ["6ニ","7","8","11","17"]],
   ["工場・倉庫・車庫・事務所", ["12イ","12ロ","13イ","13ロ","14","15"]],
-  ["複合ビル・地下街", ["16イ","16ロ","16の2","16の3"]],
+  ["複合ビル・地下街", ["複合","16の2","16の3"]],
   ["その他（浴場・駅・アーケード・山林・舟車）", ["9イ","9ロ","10","18","19","20"]]
 ];
 var 福祉 = [
@@ -456,9 +456,38 @@ function 項(code){ var m = /^(\d+(?:の\d)?)/.exec(code); return m[1]; }
 function 番号と名(code){ var t = 用途の名[code], i = t.indexOf(' '); return ['<span class="num">'+esc(t.slice(0,i))+'</span>', esc(t.slice(i+1))]; }
 function 条を読む(k){ var m = /^([法令規])(\d+)(?:_(\d+))?$/.exec(k); return m ? m[1]+m[2]+'条'+(m[3]?'の'+m[3]:'') : k; }
 var 調べた = [];
+// ---- 複合ビル: 入っている用途と、その部分の床面積を並べる ----
+var 下書き = [];
+function 足せる(c){ return c !== '複合' && parseFloat(項(c)) <= 15 && !/の/.test(項(c)); }
+function 短い名(code){ var t = 用途の名[code].split(' ').slice(1).join(' '), m = /^[^・／（]+/.exec(t); return m && m[0].length < t.length ? m[0] + 'など' : t; }
+function 部分の札(ps){ return ps.map(function(p){ return 用途の名[p.用途].split(' ')[0] + ' ' + 短い名(p.用途) + ' ' + p.延べ + '㎡'; }); }
+function 複合を始める(直す){ 下書き = 直す && 答.部分 ? 答.部分.map(function(p){ return Object.assign({}, p); }) : []; 進む({画面:'複合', 用途:null, 部分:null, 設備:null, 足す:false, 直す: !!直す}); }
+function 複合へ戻る(){ var i = -1; 道.forEach(function(x, j){ if(x.画面 === '複合') i = j; }); if(i >= 0) 何段か戻る(道.length - 1 - i); }
+function 部分を直す(i){ 進む({画面:'部分の面積', 足す用途: 下書き[i].用途, 何番: i}); }
+function 部分を消す(i){ 下書き.splice(i, 1); 描く(); }
+function 部分を入れる(){
+  var g = 今(), el = document.getElementById('in_part'), v = parseFloat(el.value), er = document.getElementById('err');
+  if(el.value === '' || isNaN(v) || v <= 0){ er.textContent = '0より大きい数字を入れて'; el.focus(); return; }
+  if(g.何番 !== null && g.何番 !== undefined) 下書き[g.何番].延べ = v;
+  else { var same = 下書き.filter(function(p){ return p.用途 === g.足す用途; })[0]; if(same) same.延べ += v; else 下書き.push({用途: g.足す用途, 延べ: v}); }
+  複合へ戻る();
+}
+function 複合の理由(code){ if(code === '16ロ') return '特定用途の部分が無いため'; var p = 下書き.filter(function(x){ return 用途に当たる(特定の用途, x.用途); })[0]; return 短い名(p.用途) + 'があるため'; }
+function 複合を決める(){
+  var code = 複合の用途(下書き), ps = 下書き.map(function(p){ return Object.assign({}, p); });
+  if(今().直す && 答.部分){
+    // 用途を直したときは、建物全体の答えを残し、部分ごとの答えだけ消す
+    Object.keys(答).forEach(function(k){ if(/^p\d+_/.test(k)) delete 答[k]; });
+    Object.keys(自動で入れた).forEach(function(k){ delete 答[k]; }); 自動で入れた = {};
+    答.用途 = code; 答.部分 = ps; 自動を入れる();
+    進む({画面:'結果', 用途: code, 部分: ps, 直す: false, 足す: false}); return;
+  }
+  答 = {用途: code, 部分: ps}; 自動で入れた = {};
+  進む({画面:'調べ方', 用途: code, 部分: ps, 設備: null, 足す: false, 直す: false});
+}
 function 始める(e, keep){
   // 答えを空にして（同じ建物の続きなら残して）、最初の質問へ。効く質問が無ければ結果へ
-  if(!keep){ 答 = {用途: 今().用途}; 自動で入れた = {}; 調べた = []; }
+  if(!keep){ 答 = {用途: 今().用途}; if(今().部分) 答.部分 = 今().部分.map(function(p){ return Object.assign({}, p); }); 自動で入れた = {}; 調べた = []; }
   if(e && 調べた.indexOf(e) < 0) 調べた.push(e);
   var q = 次の質問(対象(e), 答);
   if(q) 進む({画面:'問', 問: q.id, 設備: e});
@@ -466,8 +495,8 @@ function 始める(e, keep){
   else 進む({画面:'結果', 設備: e});
 }
 var 言い換え = {"保育園": "保育所", "ぼうかかんり": "防火管理", "老人ホーム": "老人ホーム", "グルホ": "グループホーム", "デイ": "デイサービス"};
-var 語の名 = {延べ:'延べ面積', 地上:'地上の階数', 地下:'地階の階数', 床_地階無窓:'地階・無窓階の床面積', 床_3階:'3階の床面積', 床_4以上:'4〜10階の床面積', 床_11以上:'11階以上の床面積', 収容_3階以上地階最大:'3階以上・地階で一番多い階の収容人員', 収容_直通1階:'階段が1つの階の収容人員', 危険物類:'少量危険物・指定可燃物', 収容:'収容人員', 収容_地階無窓:'地階・無窓階の収容人員', 収容_階最大:'一番多い階の収容人員', 延べ_地上:'地階を除く延べ面積', 床_地階合計:'地階の床面積の合計', 床_1と2階:'1階と2階の床面積の合計', 敷地:'敷地の面積', 高さ31超:'高さ31m超', 特殊部分:'駐車場・電気室などの部分', 鉄網:'ラスモルタルなどの壁・床・天井', 契約50超:'契約電流50A超', 宿泊:'入居・宿泊', 介助主:'介助が要る人が主', 火気:'火を使う設備', 直通1:'直通階段が1つ', 構造:'造り', 内装:'内装が難燃', 平屋以外:'平屋でない'};
-var 語の単位 = {延べ:'㎡', 床_地階無窓:'㎡', 床_3階:'㎡', 床_4以上:'㎡', 延べ_地上:'㎡', 床_地階合計:'㎡', 床_1と2階:'㎡', 敷地:'㎡', 地上:'階', 地下:'階', 収容:'人', 収容_地階無窓:'人', 収容_階最大:'人'};
+var 語の名 = {延べ:'延べ面積', 地上:'地上の階数', 地下:'地階の階数', 床_地階無窓:'地階・無窓階の床面積', 床_3階:'3階の床面積', 床_4以上:'4〜10階の床面積', 床_11以上:'11階以上の床面積', 収容_3階以上地階最大:'3階以上・地階で一番多い階の収容人員', 収容_直通1階:'階段が1つの階の収容人員', 危険物類:'少量危険物・指定可燃物', 収容:'収容人員', 収容_地階無窓:'地階・無窓階の収容人員', 収容_階最大:'一番多い階の収容人員', 延べ_地上:'地階を除く延べ面積', 床_地階合計:'地階の床面積の合計', 床_1と2階:'1階と2階の床面積の合計', 敷地:'敷地の面積', 高さ31超:'高さ31m超', 特殊部分:'駐車場・電気室などの部分', 鉄網:'ラスモルタルなどの壁・床・天井', 契約50超:'契約電流50A超', 宿泊:'入居・宿泊', 介助主:'介助が要る人が主', 火気:'火を使う設備', 直通1:'直通階段が1つ', 構造:'造り', 内装:'内装が難燃', 平屋以外:'平屋でない', 特定_避難階以外:'特定用途の部分が3階以上か地階にある', 床23_地階無窓:'地階・無窓階の二項・三項の部分', 床特_地階無窓:'地階・無窓階の特定用途の部分', 床特_4以上:'4〜10階の特定用途の部分', 床特_地階合計:'地階の特定用途の部分の合計', 下階特定:'下の階に一項〜四項などの部分', 特定面積:'特定用途の部分の合計', 二三面積:'二項・三項の部分の合計', 二三あり:'二項か三項の部分がある', 二四あり:'二項か四項の部分がある', 一項あり:'一項の部分がある'};
+var 語の単位 = {床23_地階無窓:'㎡', 床特_地階無窓:'㎡', 床特_4以上:'㎡', 床特_地階合計:'㎡', 特定面積:'㎡', 二三面積:'㎡', 床_11以上:'㎡', 収容_3階以上地階最大:'人', 収容_直通1階:'人', 延べ:'㎡',床_地階無窓:'㎡', 床_3階:'㎡', 床_4以上:'㎡', 延べ_地上:'㎡', 床_地階合計:'㎡', 床_1と2階:'㎡', 敷地:'㎡', 地上:'階', 地下:'階', 収容:'人', 収容_地階無窓:'人', 収容_階最大:'人'};
 function 条件の文(c){
   var f = c[0], op = c[1], v = c[2];
   var nm = f.indexOf('max:') === 0 ? f.slice(4).split(',').map(function(x){ return 語の名[x] || x; }).join('・') + 'のどれか' : (語の名[f] || f);
@@ -493,6 +522,7 @@ function 表から基準(e, code){
   return 'この用途は、この設備の対象に入っていない（' + (t.条 || []).map(条を読む).join('・') + '）';
 }
 function 番号を押す(k, 字){
+  if(k === '16'){ 複合を始める(); return; }
   var hit = Object.keys(用途の名).filter(function(c){ return 項(c) === k && (!字 || c.charAt(1) === 字); });
   if(hit.length === 1) 用途を決める(hit[0]); else 進む({画面:'番号', 番号: k, 字: 字 || null});
 }
@@ -515,20 +545,21 @@ function 確かめる(文, 進める文, fn){
   box.innerHTML = '<div class="also">' + esc(文) + '</div><button class="b go" onclick="var f = 待ちの確かめ; 待ちの確かめ = null; f();">' + esc(進める文) + '</button><button class="b" onclick="this.parentElement.remove()">やめる</button>';
   box.scrollIntoView({block: 'center'});
 }
-function 最初から(はい){ if(!はい && Object.keys(答).length > 1){ 確かめる('入れた答えを全部消して、最初の画面に戻る？', '消して最初に戻る', function(){ 最初から(true); }); return; } 答 = {}; 自動で入れた = {}; 進む({画面:'大', 大:null, 中:null, 用途:null, 設備:null, 調べ方:null}); }
+function 最初から(はい){ if(!はい && Object.keys(答).length > 1){ 確かめる('入れた答えを全部消して、最初の画面に戻る？', '消して最初に戻る', function(){ 最初から(true); }); return; } 答 = {}; 自動で入れた = {}; 進む({画面:'大', 大:null, 中:null, 用途:null, 部分:null, 足す:false, 直す:false, 設備:null, 調べ方:null}); }
 window.addEventListener('popstate', function(e){ var n = e.state && e.state.n ? e.state.n : 1; if(n < 道.length){ 道.length = n; } 描く(); window.scrollTo(0, 今().y || 0); });
 function 要の名前(ns){
   var out = [];
   ns.forEach(function(n){
     var xs = n.indexOf('max:') === 0 ? n.slice(4).split(',') : n === '平屋以外' ? ['地上', '地下'] : [n];
-    xs.forEach(function(x){ if(答[x] !== undefined) return; var t = 名前(x); if(out.indexOf(t) < 0) out.push(t); });
+    xs.forEach(function(x){ if(答[x] !== undefined) return; var t = 名前(x, 答); if(out.indexOf(t) < 0) out.push(t); });
   });
-  return out.length ? out : ns.map(名前);
+  return out.length ? out : ns.map(function(x){ return 名前(x, 答); });
 }
 var 特殊の語 = /駐車|道路|通信機器|発電機|変圧器|電気設備|ボイラー|火を多く|ヘリポート|自動車の修理|整備/;
 function 効く注記(r){ return r.注記.filter(function(y){ return !(答.特殊部分 === false && 特殊の語.test(y.理由 || '')); }); }
 function 見出し(r){
   var st = 見た目(r);
+  if(st === '要る' && r.内訳 && r.要る.every(function(y){ return y.どこ !== '建物全体'; })) return '要る（一部の用途）';
   if(st === '要る' && r.要る.every(function(y){ return y.範囲 === '階'; })) return '要る（一部の階）';
   if(st === '要らない' && 効く注記(r).length) return '要らない（条件あり）';
   return st;
@@ -547,7 +578,19 @@ function 見た目(r){
   if(r.変わった && r.変わった.length) return '見直し中';
   return r.状態 === '条件次第' ? 'まだ決まらない' : r.状態;
 }
-function 用途を決める(code){ 答 = {用途: code}; 自動で入れた = {}; 進む({画面:'調べ方', 用途: code, 設備: null}); }
+function 用途を決める(code){
+  if(今().足す){ 進む({画面:'部分の面積', 足す用途: code, 何番: null}); return; }
+  if(/^16[イロ]$/.test(code)){ 複合を始める(); return; }
+  答 = {用途: code}; 自動で入れた = {}; 進む({画面:'調べ方', 用途: code, 部分: null, 設備: null});
+}
+// 答えたものを、質問の順（建物 → 部分ごと）に並べる
+function 答えたid(){
+  var ids = []; 質問.forEach(function(q){ if(!q.部分だけ && 答[q.id] !== undefined) ids.push(q.id); });
+  (答.部分 || []).forEach(function(p, i){ 質問.forEach(function(q){ var k = 'p' + i + '_' + q.id; if(答[k] !== undefined) ids.push(k); }); });
+  return ids;
+}
+function 語(id){ var m = /^p(\d+)_(.+)$/.exec(id); if(m && 答.部分 && 答.部分[+m[1]]) return '〔' + 短い名(答.部分[+m[1]].用途) + '〕' + (語の名[m[2]] || m[2]); return 語の名[id] || id; }
+function 単位(id){ return 語の単位[id.replace(/^p\d+_/, '')] || ''; }
 function 結果へ(){ var e = 今().設備; if(e) 進む({画面:'設備', 見る: e, 結果から: true}); else 進む({画面:'結果'}); }
 function 次へ(){ var q = 次の質問(対象(), 答); if(q) 進む({画面:'問', 問: q.id}); else 結果へ(); }
 function 残り(){
@@ -558,11 +601,11 @@ function 残り(){
 }
 function 要約(たたむ){
   var a = [];
-  質問.forEach(function(q){
-    var v = 答[q.id]; if(v === undefined || 自動で入れた[q.id]) return;
-    var nm = 語の名[q.id] || q.id, u = 語の単位[q.id] || '';
+  答えたid().forEach(function(id){
+    var v = 答[id]; if(自動で入れた[id]) return;
+    var nm = 語(id), u = 単位(id);
     var t = v === 不明 ? nm + ': わからない' : v === true ? nm + ': はい' : v === false ? nm + ': いいえ' : nm + ' ' + v + u;
-    a.push('<button class="vb'+(v === 不明 ? ' unk' : '')+'" onclick="見直す(\''+q.id+'\')">'+esc(t)+'</button>');
+    a.push('<button class="vb'+(v === 不明 ? ' unk' : '')+'" onclick="見直す(\''+id+'\')">'+esc(t)+'</button>');
   });
   if(!a.length) return '';
   if(たたむ) return '<details class="sum"><summary>入れた値 '+a.length+'件（押すと開く・直せる）</summary>'+a.join('')+'</details>';
@@ -623,6 +666,9 @@ function 数で答える(id){
   if((id === '地上' || id === '地下') && v !== Math.floor(v)) return だめ('階数は整数で入れて');
   if(id === '地上' && (v < 1 || v > 100)) return だめ('地上の階数は1〜100で入れて（面積を入れていないか確かめて）');
   if(id === '地下' && v > 10) return だめ('地階の階数は0〜10で入れて（面積を入れていないか確かめて）');
+  var pm = /^p(\d+)_(床_|延べ_地上)/.exec(id), pp = pm && 答.部分 ? 答.部分[+pm[1]] : null;
+  if(pp && v > pp.延べ){ 確かめる('この値（'+v+'㎡）が、この用途の部分の床面積の合計（'+pp.延べ+'㎡）より大きい。打ち間違いでなければ進める', 'このまま進める', function(){ 答える(id, v); }); return; }
+  if(id === '延べ' && 答.部分){ var sm = 答.部分.reduce(function(s, p){ return s + p.延べ; }, 0); if(v < sm){ 確かめる('延べ面積（'+v+'㎡）が、用途の部分の合計（'+sm+'㎡）より小さい。打ち間違いでなければ進める', 'このまま進める', function(){ 答える(id, v); }); return; } }
   if(/^床_/.test(id) && typeof 答.延べ === 'number' && v > 答.延べ){ 確かめる('この階の床面積（'+v+'㎡）が延べ面積（'+答.延べ+'㎡）より大きい。打ち間違いでなければ進める', 'このまま進める', function(){ 答える(id, v); }); return; }
   if(/^収容_/.test(id) && typeof 答.収容 === 'number' && v > 答.収容){ 確かめる('この人数（'+v+'人）が建物全体の収容人員（'+答.収容+'人）より多い。打ち間違いでなければ進める', 'このまま進める', function(){ 答える(id, v); }); return; }
   答える(id, v);
@@ -632,15 +678,7 @@ function 消す_から(id){
   var drop = false;
   質問.forEach(function(q){ if(q.id === id) drop = true; if(drop){ delete 答[q.id]; delete 自動で入れた[q.id]; } });
 }
-function 自動を入れる(){
-  var moved = true;
-  while(moved){ moved = false;
-    質問.forEach(function(q){
-      if(答[q.id] !== undefined || !q.自動 || (q.出す && !q.出す(答))) return;
-      var v = q.自動(答); if(v !== undefined){ 答[q.id] = v; 自動で入れた[q.id] = true; moved = true; }
-    });
-  }
-}
+function 自動を入れる(){ 自動で埋める(答); }
 function 一覧へ(){ var i = -1; 道.forEach(function(x, j){ if(x.画面 === '結果') i = j; }); if(i >= 0) 何段か戻る(道.length - 1 - i); }
 function 見直す(id){ var g = 今(); 進む({画面:'問', 問: id, 戻り: g.画面 === '設備' ? g.見る : null}); }
 function ボタン(文, 押す, cls){ return '<button class="nb '+(cls||'')+'" onclick="'+押す+'">'+文+'</button>'; }
@@ -668,10 +706,11 @@ function 描く(){
   h += (g.画面 !== '大' ? '<button class="sm" onclick="最初から()">最初から</button>' : '') + '</div>';
   札を出す(null);
   document.body.classList.toggle('deep', 道.length > 1);
-  if(g.用途 && g.画面 !== '大' && g.画面 !== '中' && g.画面 !== '番号'){ var nn = 番号と名(g.用途); h += '<div class="where">'+nn[0]+' '+nn[1]+(g.設備 && g.画面 !== '設備を選ぶ' ? ' ／ '+esc(g.設備)+'だけ' : '')+'</div>'; }
+  if(g.用途 && g.画面 !== '大' && g.画面 !== '中' && g.画面 !== '番号'){ var nn = 番号と名(g.用途); h += '<div class="where">'+nn[0]+' '+nn[1]+(答.部分 && 答.用途 === g.用途 ? '（' + esc(答.部分.map(function(p){ return 短い名(p.用途); }).join('・')) + '）' : '')+(g.設備 && g.画面 !== '設備を選ぶ' ? ' ／ '+esc(g.設備)+'だけ' : '')+'</div>'; }
   if(g.画面 === '大'){
-    h += ボタン('言葉で探す（例: カラオケ・保育園・防火管理者）', "進む({画面:'探す'})", 'lite') + '<div class="qt">建物の用途は？</div>';
-    大分類.forEach(function(x, i){ h += ボタン(esc(x[0]), "進む({画面:'中', 大:"+i+", 中:null})"); });
+    if(g.足す) h += '<div class="qt">足す用途は？</div>';
+    else h += ボタン('言葉で探す（例: カラオケ・保育園・防火管理者）', "進む({画面:'探す'})", 'lite') + '<div class="qt">建物の用途は？</div>';
+    大分類.forEach(function(x, i){ if(g.足す && x[1] && !x[1].some(足せる)) return; h += ボタン(esc(x[0]), "進む({画面:'中', 大:"+i+", 中:null})"); });
     h += '<div class="sub">' + ボタン('項の番号で選ぶ', "進む({画面:'番号', 番号:null})", 'lite') + '</div>';
   } else if(g.画面 === '中'){
     var 組 = 大分類[g.大];
@@ -679,13 +718,13 @@ function 描く(){
       h += '<div class="qt">'+esc(組[0])+'の、どれ？</div>';
       福祉.forEach(function(x, i){ h += ボタン(esc(x[0]), "進む({画面:'中', 中:"+i+"})"); });
     } else {
-      var codes = 組[1] || 福祉[g.中][1];
+      var codes = (組[1] || 福祉[g.中][1]).filter(function(c){ return !g.足す || 足せる(c); });
       h += '<div class="qt">'+esc(組[1] ? 組[0] : 福祉[g.中][0])+'の、どれ？</div>';
       if(codes[0] === '6イ1') h += '<div class="hint">特定診療科＝内科・整形外科・リハビリテーション科など（総務省令で定める科）。(1)はその科があり療養病床か一般病床を持つ病院、(2)はその科があり4人以上入院できる診療所、(3)はそれ以外の病院と入院できる診療所（別表第一(6)イ）</div>';
-      codes.forEach(function(c){ var nn = 番号と名(c); h += ボタン(nn[0]+nn[1], "用途を決める('"+c+"')", 'use'); });
+      codes.forEach(function(c){ if(c === '複合'){ h += ボタン('<span class="num">(16)</span>複合ビル（用途が2つ以上）', "複合を始める()", 'use'); return; } var nn = 番号と名(c); h += ボタン(nn[0]+nn[1], "用途を決める('"+c+"')", 'use'); });
     }
   } else if(g.画面 === '番号'){
-    var all = Object.keys(用途の名);
+    var all = Object.keys(用途の名).filter(function(c){ return !g.足す || 足せる(c); });
     if(!g.番号){
       h += '<div class="qt">項の番号は？</div><div class="grid">';
       all.map(項).filter(function(v,i,a){ return a.indexOf(v) === i; }).sort(function(x, y){ return parseFloat(x) - parseFloat(y) || x.length - y.length || (x < y ? -1 : 1); }).forEach(function(k){ h += '<button class="nb sq" onclick="番号を押す(\''+k+'\')">('+esc(k)+')</button>'; });
@@ -703,9 +742,23 @@ function 描く(){
         hit.forEach(function(c){ var nn = 番号と名(c); h += ボタン(nn[0]+nn[1], "用途を決める('"+c+"')", 'use'); });
       }
     }
+  } else if(g.画面 === '複合'){
+    var 種 = 下書き.length;
+    h += '<div class="qt">このビルに入っている用途と、その床面積は？</div><div class="note">用途ごとに、その用途に使う部分の床面積の合計を入れる（同じ用途は1つにまとまる）</div>';
+    下書き.forEach(function(p, i){ h += '<div class="ans"><span onclick="部分を直す('+i+')">'+esc(部分の札([p])[0])+' <span class="fix">直す</span></span> <button class="sm" onclick="部分を消す('+i+')">✕ 消す</button></div>'; });
+    if(種 < 6) h += ボタン('用途を足す', "進む({画面:'大', 足す:true, 大:null, 中:null, 番号:null})", 種 ? 'lite' : '');
+    else h += '<div class="note">用途は6つまで</div>';
+    if(種 >= 2) h += ボタン('これで決める', '複合を決める()', 'go') + '<div class="note">'+esc(用途の名[複合の用途(下書き)])+' になる（'+esc(複合の理由(複合の用途(下書き)))+'）</div>';
+    else if(種 === 1) h += '<div class="note">用途が2つ以上で決められる。用途が1つだけなら、最初の画面でその用途を選ぶ</div>';
+    h += '<div class="also">令8条の区画（開口部の無い耐火構造の床・壁）で分かれている部分は、別々の建物として調べる。<br>主な用途に従う部分・共用部分・住宅の部分の割り振りは国の通知にあり、この画面では判定しない。<br>分け方が分からなければ管轄の消防署で確かめる。</div>';
+  } else if(g.画面 === '部分の面積'){
+    var 前2 = g.何番 !== null && g.何番 !== undefined ? 下書き[g.何番].延べ : '';
+    h += '<div class="q"><div class="qt">'+esc(短い名(g.足す用途))+'の部分の床面積の合計は何㎡？</div><div class="hint">この用途に使う部分を全部の階で足した面積</div><div id="err" class="err"></div>'
+      + '<input id="in_part" type="number" inputmode="decimal" min="0" value="'+前2+'" onkeydown="if(event.key===\'Enter\')部分を入れる()"><button class="b go" onclick="部分を入れる()">決める</button></div>';
   } else if(g.画面 === '探す'){
     h += '<div class="qt">言葉で探す</div><input id="q2" type="search" placeholder="例: デイサービス スプリンクラー" oninput="探す()"><div id="hits"></div>';
   } else if(g.画面 === '調べ方'){
+    if(g.部分) h += '<div class="also">'+esc(用途の名[g.用途])+' と判定（'+esc(g.用途 === '16ロ' ? '特定用途の部分が無いため' : 短い名(g.部分.filter(function(x){ return 用途に当たる(特定の用途, x.用途); })[0].用途) + 'があるため')+'）。用途ごとの部分を1つの建物とみなして判定する（令9条）</div>';
     h += '<div class="qt">何を調べる？</div>';
     h += ボタン('全部の設備を調べる（質問に答える）', "始める(null)");
     h += ボタン('1つの設備だけ調べる', "進む({画面:'設備を選ぶ'})");
@@ -715,9 +768,10 @@ function 描く(){
     設備の順.forEach(function(e){ h += '<button class="nb sq2" onclick="始める(\''+e+'\','+(g.続き?'true':'false')+')">'+esc(e)+(g.続き && 調べた.indexOf(e) >= 0 ? '<span class="kj">調べた</span>' : '')+'</button>'; });
     h += '</div>';
   } else if(g.画面 === '問'){
-    var q = null; 質問.forEach(function(x){ if(x.id === g.問) q = x; });
+    var q = 質問を引く(g.問, 答);
     var 前 = 答[q.id];
-    var n = Object.keys(答).filter(function(k){ return k !== '用途' && !自動で入れた[k]; }).length;
+    if(q.id === '延べ' && 前 === undefined && 答.部分) 前 = 答.部分.reduce(function(s, p){ return s + p.延べ; }, 0);
+    var n = Object.keys(答).filter(function(k){ return k !== '用途' && k !== '部分' && !自動で入れた[k]; }).length;
     var 後 = 残り();
     h += 要約() + '<div class="step">答えた '+n+'問 ／ あと多くて '+後+'問（答えで変わる）</div><div class="q"><div class="qt">'+esc(q.文)+'</div>'
       + (q.文.indexOf('無窓階') >= 0 ? '<div class="hint">無窓階＝地上の階のうち、避難や消火活動に有効な開口部（窓など）が足りない階（令10条1項5号）</div>' : '')
@@ -738,6 +792,8 @@ function 描く(){
     res.forEach(function(r){ var st = 見た目(r); (st === '要る' ? 要 : st === '要らない' ? (効く注記(r).length ? 条 : 不) : 確).push(r); });
     var 名札 = function(r){ var st = 見た目(r), lab = 見出し(r);
       return '<button class="rb '+色[st]+'" onclick="進む({画面:\'設備\', 見る:\''+r.設備+'\', 結果から: true})"><b>'+esc(r.設備)+'</b>'+(r.変わった.length ? ' <span class="red">条文が変わった</span>' : '')+'<span class="st">'+lab+' ›</span></button>'; };
+    if(答.部分) h += '<div class="also">複合ビルは、用途ごとの部分を1つの建物とみなして判定する（令9条）。令9条のかっこ書きの号だけ、建物全体で判定している</div><div class="sum">入っている用途（押すと直せる）: <button class="vb" onclick="複合を始める(true)">'+esc(部分の札(答.部分).join('・'))+'</button></div>'
+      + (答.用途 === '16イ' && 答.地下 >= 1 ? '<div class="note">地下街と一体を成すと消防長・消防署長が指定した地階は、一部の規定で地下街の部分とみなす（令9条の2）</div>' : '');
     h += 要約(true) + '<div class="qt">要る設備 '+要.length+'件</div>' + (要.length ? 要.map(名札).join('') : '<div class="note">なし</div>');
     if(確.length) h += '<div class="qt">自分で確かめるもの '+確.length+'件</div>' + 確.map(名札).join('');
     if(条.length) h += '<div class="qt">条件しだいで要る '+条.length+'件</div><div class="note">質問で聞いていない条件（危険物の量など）があれば要る。押すと条件が出る</div>' + 条.map(名札).join('');
@@ -747,10 +803,11 @@ function 描く(){
     h += '<div class="foot">これは条文の案内で、個別の建物の判断ではない。市町村の火災予防条例・消防長等の特例・既存の建物の扱い・施行前の改正は入っていない。最終の判断は管轄の消防署へ。<br>' + esc(document.querySelector('.meta').textContent) + '</div>';
   } else if(g.画面 === '見直す'){
     h += '<div class="qt">答えを見直す</div><div class="note">押した質問だけ答え直す。ほかの答えは残る</div>';
-    質問.forEach(function(x){
-      if(答[x.id] === undefined) return;
-      if(自動で入れた[x.id]){ h += '<div class="ans auto">'+esc(x.文)+' <b>'+esc(見せる値(答[x.id]))+'</b> <span class="fix">階数から自動</span></div>'; return; }
-      h += '<div class="ans" onclick="見直す(\''+x.id+'\')">'+esc(x.文)+' <b>'+esc(見せる値(答[x.id]))+'</b> <span class="fix">直す</span></div>';
+    if(答.部分) h += '<div class="ans" onclick="複合を始める(true)">入っている用途と床面積 <b>'+esc(部分の札(答.部分).join('・'))+'</b> <span class="fix">直す</span></div>';
+    答えたid().forEach(function(id){
+      var x = 質問を引く(id, 答);
+      if(自動で入れた[id]){ h += '<div class="ans auto">'+esc(x.文)+' <b>'+esc(見せる値(答[id]))+'</b> <span class="fix">'+(答.部分 ? '自動' : '階数から自動')+'</span></div>'; return; }
+      h += '<div class="ans" onclick="見直す(\''+id+'\')">'+esc(x.文)+' <b>'+esc(見せる値(答[id]))+'</b> <span class="fix">直す</span></div>';
     });
   } else if(g.画面 === '決まり'){
     h += '<div class="qt">設備以外の決まり</div>';
@@ -758,6 +815,7 @@ function 描く(){
     並び.forEach(function(x){ h += '<button class="rb" onclick="進む({画面:\'札\', 札:\''+x[0]+'\'})"><b>'+esc(x[1])+'</b><span class="kj">'+esc(x[2])+'</span></button>'; });
   } else if(g.画面 === '基準'){
     h += '<div class="qt">この用途の基準（19設備）</div>';
+    if(/^16[イロ]$/.test(g.用途)) h += '<div class="note">ここに出るのは建物全体で判定する号だけ。ほかは用途ごとの部分で判定する（令9条）</div>';
     設備の順.forEach(function(e){ var kj = (基準[g.用途] || {})[e]; h += '<button class="rb" onclick="進む({画面:\'札\', 札:\''+(kj ? kj[1] : 表たち.filter(function(x){ return x.設備 === e; })[0].札)+'\', 見る:\''+e+'\', 結果から: false})"><b>'+esc(e)+'</b><span class="kj">'+(kj && !kj[3] ? esc(kj[0]) + ほか(e, g.用途) : esc(表から基準(e, g.用途)))+'</span><span class="st">›</span></button>'; });
     h += ボタン('この用途で質問に答える', "始める(null)");
   } else if(g.画面 === '設備'){
@@ -767,17 +825,21 @@ function 描く(){
     if(結果つき) h += 要約(true);
     if(結果つき){
       var r = 全部を判定([t], 答)[0], st = 見た目(r), why = '';
-      if(st === '要る') why = r.要る.map(function(y){ return esc(y.号)+(y.理由?'（'+esc(y.理由)+'）':'')+(y.範囲==='階'?'（その階に設置）':'')+(y.線&&y.線.length?'<br>'+esc(y.線.join('・')):''); }).join('<br>');
+      if(st === '要る') why = r.要る.map(function(y){ return (y.どこ ? '【'+esc(y.どこ)+'】' : '')+esc(y.号)+(y.理由?'（'+esc(y.理由)+'）':'')+(y.範囲==='階'?'（その階に設置）':'')+(y.線&&y.線.length?'<br>'+esc(y.線.join('・')):''); }).join('<br>');
       if(st === 'まだ決まらない'){
         var ws = [], ids = [];
         r.待ち.forEach(function(w){
           w.説明.forEach(function(v){ if(ws.indexOf(v) < 0) ws.push(v); });
-          w.要.forEach(function(n){ (n.indexOf('max:') === 0 ? n.slice(4).split(',') : n === '平屋以外' ? ['地上','地下'] : [n]).forEach(function(x){ var v = 答[x]; if((v === undefined || v === 不明) && ids.indexOf(x) < 0 && 名前(x) !== x) ids.push(x); }); });
+          w.要.forEach(function(n){ (n.indexOf('max:') === 0 ? n.slice(4).split(',') : n === '平屋以外' ? ['地上','地下'] : [n]).forEach(function(x){ var v = 答[x]; if((v === undefined || v === 不明) && ids.indexOf(x) < 0 && 名前(x, 答) !== x) ids.push(x); }); });
         });
-        why = 'これが分かれば決まる（押すと答えられる）:' + ids.map(function(x){ return '<button class="nb lite" onclick="見直す(\''+x+'\')">'+esc(名前(x))+(答[x] === 不明 ? '<span class="kj">「わからない」と答えた</span>' : '')+'</button>'; }).join('') + (ws.length ? '<div class="note">'+esc(ws.join(' ／ '))+'</div>' : '');
+        why = 'これが分かれば決まる（押すと答えられる）:' + ids.map(function(x){ return '<button class="nb lite" onclick="見直す(\''+x+'\')">'+esc(名前(x, 答))+(答[x] === 不明 ? '<span class="kj">「わからない」と答えた</span>' : '')+'</button>'; }).join('') + (ws.length ? '<div class="note">'+esc(ws.join(' ／ '))+'</div>' : '');
       }
-      if(st === '判定できない') why = r.できない.map(function(y){ return esc(y.号)+'：'+esc(y.理由); }).join('<br>');
-      if(st === '要らない') why = 'この用途と入れた値では、設置が要る条件のどれにも当たらない';
+      if(st === '判定できない') why = r.できない.map(function(y){ return (y.どこ ? '【'+esc(y.どこ)+'】' : '')+esc(y.号)+'：'+esc(y.理由); }).join('<br>');
+      if(r.内訳){
+        var 無 = r.内訳.filter(function(x){ return x.状態 === '要らない'; }).map(function(x){ return x.どこ; });
+        why += '<div class="note">建物全体で判定する号（令9条のかっこ書き）と、用途ごとの部分の判定を合わせた結果'+(無.length ? '。当たらなかったところ: '+esc(無.join('・')) : '')+'</div>';
+      }
+      if(st === '要らない') why = r.内訳 ? '建物全体でも、用途ごとの部分（' + esc(答.部分.map(function(p){ return 短い名(p.用途); }).join('・')) + '）でも、設置が要る条件のどれにも当たらない' : 'この用途と入れた値では、設置が要る条件のどれにも当たらない';
       if(st === '見直し中') why = '根拠の条文（' + esc(r.変わった.map(条を読む).join('・')) + '）が改正などで変わった。人が新しい条文を確かめ終わるまで、この設備の判定は出さない。下の「根拠と条文を見る」で新しい条文は読める';
       h += '<div class="rr '+色[st]+'"><div class="rh"><span class="st">'+st+'</span></div>'
         + (r.変わった.length ? '<div class="band red">条文が変わった・要再確認（'+esc(r.変わった.join('・'))+'）</div>' : '')
@@ -812,11 +874,12 @@ function 描く(){
 function 写す(){
   var g = 今();
   var lines = ['消防用設備のチェック（' + new Date().toLocaleDateString('ja-JP') + '）', '用途: ' + 用途の名[g.用途] + (g.設備 ? '（調べた設備: ' + 調べた.join('・') + '）' : '')];
-  質問.forEach(function(x){ if(答[x.id] !== undefined && !自動で入れた[x.id]) lines.push(x.文 + ' ' + 見せる値(答[x.id])); });
+  if(答.部分) lines.push('入っている用途: ' + 部分の札(答.部分).join('・'));
+  答えたid().forEach(function(id){ if(!自動で入れた[id]) lines.push(質問を引く(id, 答).文 + ' ' + 見せる値(答[id])); });
   var 順 = {"要る":0,"まだ決まらない":1,"判定できない":1,"見直し中":1,"要らない":2};
   var 写す表 = g.設備 && 調べた.length ? 表たち.filter(function(t){ return 調べた.indexOf(t.設備) >= 0; }) : 対象();
   全部を判定(写す表, 答).sort(function(x, y){ return 順[見た目(x)] - 順[見た目(y)]; }).forEach(function(r){
-    lines.push('■' + r.設備 + ': ' + 見出し(r) + (r.要る.length ? '（' + r.要る.map(function(x){ return x.号; }).join('・') + '）' : '') + (見た目(r) === '要らない' && 効く注記(r).length ? ' ※' + 効く注記(r).map(function(y){ return y.理由; }).join('／') : ''));
+    lines.push('■' + r.設備 + ': ' + 見出し(r) + (r.要る.length ? '（' + r.要る.map(function(x){ return (x.どこ ? x.どこ + ' ' : '') + x.号; }).join('・') + '）' : '') + (見た目(r) === '要らない' && 効く注記(r).length ? ' ※' + 効く注記(r).map(function(y){ return y.理由; }).join('／') : ''));
   });
   lines.push('最終判断は条文の原文と所轄の運用。' + document.querySelector('.meta').textContent);
   var t = lines.join('\n');

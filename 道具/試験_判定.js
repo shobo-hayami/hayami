@@ -7,7 +7,7 @@ const 例題 = JSON.parse(fs.readFileSync(path.join(__dirname, "例題.json"), "
 let ng = 0, n = 0;
 for (const e of 例題) {
   const a = Object.assign({}, e.答え);
-  J.次の質問(表たち, a); // 自動で埋まる答えを埋める
+  J.自動で埋める(a); J.次の質問(表たち, a); // 自動で埋まる答えを埋める
   const res = J.全部を判定(表たち, a);
   for (const [k, v] of Object.entries(e.期待)) {
     n++;
