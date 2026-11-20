@@ -25,6 +25,10 @@ for (const 段 of Object.keys(問)) for (const p of 問[段]) {
   n++; if (r.食い違い.length) 違う(`入れ直しで食い違う ${e.名前}: ${r.食い違い.join("・")}`);
   const 表 = vm.runInContext("練習の表(__e)", ctx);
   for (const x of 表) {
+    // 行を押すと開く文: 質問が引けて、補足の有無が元の質問と同じ（複合ビルの部分の行でも補足が消えない）
+    ctx.__id = x.id;
+    const q = vm.runInContext("質問を引く(__id, 例題を入れる(__e).a)", ctx), 元 = vm.runInContext("質問.filter(function (y) { return y.id === __id.replace(/^p\\d+_/, ''); })[0]", ctx);
+    n++; if (!q || !元 || !!q.補足 !== !!元.補足) 違う(`行を押して開く文の補足が消える ${e.名前}: ${x.id}`);
     n++; if (!x.名あり || !x.単位あり) 違う(`表の名前か単位が無い ${e.名前}: ${x.id}`);
     n++; if (/16イ|16ロ|\(16\)イ|\(16\)ロ|（16）/.test(x.名 + x.値)) 違う(`表に答えの手がかり ${e.名前}: ${x.名}`);
   }
