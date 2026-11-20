@@ -509,7 +509,7 @@ function 複合を決める(){
     // 用途を直したときは、建物全体の答えを残し、部分ごとの答えだけ消す
     Object.keys(答).forEach(function(k){ if(/^p\d+_/.test(k)) delete 答[k]; });
     Object.keys(自動で入れた).forEach(function(k){ delete 答[k]; }); 自動で入れた = {};
-    答.用途 = code; 答.部分 = ps; 自動を入れる();
+    答.用途 = code; 答.部分 = ps; 合わない答えを消す(答); 自動を入れる();
     進む({画面:'結果', 用途: code, 部分: ps, 直す: false, 足す: false}); return;
   }
   答 = {用途: code, 部分: ps}; 自動で入れた = {};
@@ -585,11 +585,11 @@ function 要の名前(ns){
 }
 var 特殊の語 = /駐車|道路|通信機器|発電機|変圧器|電気設備|ボイラー|火を多く|ヘリポート|自動車の修理|整備/;
 function 効く注記(r){ return r.注記.filter(function(y){ return !(答.特殊部分 === false && 特殊の語.test(y.理由 || '')); }); }
-// 「要る」と出ているが、もっと広い範囲に要る号がまだ決まっていない（質問に「わからない」と答えたか、途中で結果を見た）ときの、その号
-function 広がる待ち(r){ return 見た目(r) === '要る' ? r.待ち.filter(function(w){ return まだ広がる(r, w); }) : []; }
+// 「要る」と出ているが、当たった号が覆っていない所（建物全体・ほかの用途の部分・ほかの階・ほかの部分）に要る号がまだ決まっていない（質問に「わからない」と答えたか、途中で結果を見た）ときの、その号
+function 広がる待ち(r){ return 見た目(r) === '要る' ? r.待ち.filter(function(w){ return まだ広がる(r, w, 答); }) : []; }
 function 見出し(r){
   var st = 見た目(r), 広 = 広がる待ち(r);
-  var 未 = !広.length ? '' : 広.some(function(w){ return !w.どこ || w.どこ === '建物全体'; }) ? '建物全体は未定' : 'ほかの用途の部分は未定';
+  var 未 = 広.length ? 未定の名(r, 答) + 'は未定' : '';
   function 付(s){ return !未 ? s : s.slice(-1) === '）' ? s.slice(0, -1) + '・' + 未 + '）' : s + '（' + 未 + '）'; }
   // 当たった号がどれも建物の一部だけのときは、かっこに範囲を入れる（一部の用途・舞台部・一部の階・指定された地階。判定.js の 一部の名）
   var 一部 = st === '要る' ? 一部の名(r) : '';
@@ -639,13 +639,31 @@ function 境目の文(x, 形){
   if(x.種 === '場合あり') return 頭 + nm + 'が' + 線 + '以上になると、要る場合がある（今' + 今 + '・あと' + あと + '。' + x.号 + '・2項）。六項ロなどは「700㎡の' + x.倍 + '倍」と「1,000㎡＋省令で定める部分の床面積」の小さい方が線になる';
   return 頭 + nm + 'が' + 線 + '以上で' + 階 + '要る（' + (/^max:/.test(x.名) ? '今いちばん広い階は' : '今') + 今 + '・あと' + あと + '。' + 号 + '）';
 }
+// 線を出していない号の文。足りない質問を「わからない」と答えたのか、まだ聞いていないのか（ほかの条件で「要らない」と決まったので聞かなかった）で分ける
+function 未の文(x){
+  var 名 = function(ys){ return ys.map(function(y){ return 語(y.id); }).filter(function(t, i, ts){ return ts.indexOf(t) === i; }).join('・'); };
+  var 分 = (x.問 || []).filter(function(y){ return y.不明; }), 聞 = (x.問 || []).filter(function(y){ return !y.不明; });
+  if(分.length && 聞.length) return x.号 + '：' + 名(分) + 'を「わからない」と答え、' + 名(聞) + 'はまだ聞いていないので、線を出していない';
+  if(分.length) return x.号 + '：' + 名(分) + 'を「わからない」と答えたので、線を出していない';
+  if(聞.length) return x.号 + '：' + 名(聞) + 'は、まだ聞いていないので、線を出していない';
+  // 質問は全部答えてあるが、値が決まらない（地上1階で地階がある建物は、平屋建かどうかを条文だけでは決めない）
+  return x.号 + '：' + x.名.map(function(n){ return n === '平屋以外' ? '平屋建かどうか' : 語の名[n] || n; }).join('・') + 'が、入れた答えからは決まらないので、線を出していない';
+}
+// 線を出していない号の、足りない質問のうち、今の答えで聞けるもの（前提の質問が「はい」でないと出ない質問は入れない）
+function 未の問(b){
+  var ids = [];
+  b.未.forEach(function(x){ (x.問 || []).forEach(function(y){ if(ids.indexOf(y.id) < 0 && 聞けるか(y.id, 答) && 名前(y.id, 答) !== y.id) ids.push(y.id); }); });
+  return ids;
+}
 function 境目の箱(r){
   var b = r.境目; if(!b) return '';
   var 見 = []; if(b.主) 見.push(境目の文(b.主)); b.すき間.forEach(function(x){ 見.push(境目の文(x)); }); b.切替.forEach(function(x){ 見.push(境目の文(x)); });
   var 他 = b.ほか.map(function(x){ return 境目の文(x) + (r.設備 === '非常警報' && x.理由 ? '（' + x.理由 + '）' : ''); })
-    .concat(b.未.map(function(x){ return x.号 + '：' + x.名.map(function(n){ return 語の名[n] || n; }).join('・') + 'が分からないので、線を出していない'; }));
+    .concat(b.未.map(未の文));
+  var 問 = 未の問(b);
   return '<div class="also"><b>要るに変わる線</b><br>' + (見.length ? 見.map(esc).join('<br>') : '近い線は無い（下の「ほかの線」に出している）')
     + '<details class="sum"><summary>ほかの線 ' + 他.length + '件</summary>' + 他.map(esc).join('<br>') + (他.length ? '<br>' : '')
+    + (問.length ? '<div class="note">線を出していない号は、次を答えると、線を出せるかが決まる（押すと答えられる）:</div>' + 問.map(function(x){ return '<button class="nb lite" onclick="見直す(\''+x+'\')">'+esc(語(x))+'を答える'+(答[x] === 不明 ? '<span class="kj">「わからない」と答えた</span>' : '')+'</button>'; }).join('') : '')
     + '線は、ほかの答えを変えずに、その値だけが増えた場合。増築で階数・無窓階・収容人員が一緒に変わるときは、答えを入れ直して判定する。今の基準での線で、市町村の条例・特例・前から建っている建物の扱いは入っていない。</details></div>';
 }
 function 見た目(r){
@@ -709,6 +727,8 @@ function 答える(id, v){
   // 1問だけ差し替える。ほかの答えは残し、階数などから自動で入れた答えだけ入れ直す
   Object.keys(自動で入れた).forEach(function(k){ delete 答[k]; }); 自動で入れた = {};
   答[id] = v;
+  // 前提の質問を答え直したとき（少量危険物を「いいえ」に、地上の階数を2に、など）、前提と合わなくなった答えは消す（判定.js の 合わない答えを消す）
+  合わない答えを消す(答, id);
   自動を入れる();
   // 設備の画面から埋めたときは、その設備の画面へ戻る（履歴を1つ戻すので、もう1回戻ると結果の一覧）
   if(今().戻り) 何段か戻る(1); else 次へ();
@@ -888,10 +908,10 @@ function 描く(){
       var r = 全部を判定([t], 答)[0], st = 見た目(r), why = '';
       if(st === '要る') why = r.要る.map(function(y){ return (y.どこ ? '【'+esc(y.どこ)+'】' : '')+esc(y.号)+(y.理由?'（'+esc(y.理由)+'）':'')+(y.範囲==='階'?'（その階に設置）':y.範囲==='舞台部'?'（舞台部に設置）':y.範囲==='その部分'?'（その部分に設置）':y.範囲==='指定された地階'?'（指定された地階に設置）':'')+(y.線&&y.線.length?'<br>'+esc(y.線.join('・')):''); }).join('<br>');
       if(st === '要る' && 広がる待ち(r).length){
-        // 一部の範囲の号で「要る」と決まったが、もっと広い範囲に要る号が決まっていない。決まった号だけを見て、ほかは要らないと読まれないようにする
+        // 一部の範囲の号で「要る」と決まったが、もっと広い範囲・別の階・別の部分に要る号が決まっていない。決まった号だけを見て、ほかは要らないと読まれないようにする
         var 広 = 広がる待ち(r), 広id = [];
         広.forEach(function(w){ w.要.forEach(function(n){ (n.indexOf('max:') === 0 ? n.slice(4).split(',') : n === '平屋以外' ? ['地上','地下'] : [n]).forEach(function(x){ var v = 答[x]; if((v === undefined || v === 不明) && 広id.indexOf(x) < 0 && 名前(x, 答) !== x) 広id.push(x); }); }); });
-        why += '<div class="note">上に出ているのは、決まった号だけ。' + (広.some(function(w){ return !w.どこ || w.どこ === '建物全体'; }) ? '建物全体に要るか' : 'ほかの用途の部分に要るか') + '（' + esc(広.map(function(w){ return (w.どこ ? '【' + w.どこ + '】' : '') + w.row.号; }).filter(function(x, i, xs){ return xs.indexOf(x) === i; }).join('・')) + '）は、まだ決まっていない。これが分かれば決まる（押すと答えられる）:</div>' + 広id.map(function(x){ return '<button class="nb lite" onclick="見直す(\''+x+'\')">'+esc(名前(x, 答))+(答[x] === 不明 ? '<span class="kj">「わからない」と答えた</span>' : '')+'</button>'; }).join('');
+        why += '<div class="note">上に出ているのは、決まった号だけ。' + 未定の名(r, 答) + 'に要るか' + '（' + esc(広.map(function(w){ return (w.どこ ? '【' + w.どこ + '】' : '') + w.row.号; }).filter(function(x, i, xs){ return xs.indexOf(x) === i; }).join('・')) + '）は、まだ決まっていない。これが分かれば決まる（押すと答えられる）:</div>' + 広id.map(function(x){ return '<button class="nb lite" onclick="見直す(\''+x+'\')">'+esc(名前(x, 答))+(答[x] === 不明 ? '<span class="kj">「わからない」と答えた</span>' : '')+'</button>'; }).join('');
       }
       if(st === 'まだ決まらない'){
         var ws = [], ids = [];
