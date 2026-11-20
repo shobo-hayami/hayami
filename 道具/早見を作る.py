@@ -591,9 +591,9 @@ function 見出し(r){
   var st = 見た目(r), 広 = 広がる待ち(r);
   var 未 = !広.length ? '' : 広.some(function(w){ return !w.どこ || w.どこ === '建物全体'; }) ? '建物全体は未定' : 'ほかの用途の部分は未定';
   function 付(s){ return !未 ? s : s.slice(-1) === '）' ? s.slice(0, -1) + '・' + 未 + '）' : s + '（' + 未 + '）'; }
-  if(st === '要る' && r.内訳 && r.要る.every(function(y){ return y.どこ !== '建物全体'; })) return 付('要る（一部の用途）');
-  if(st === '要る' && r.要る.every(function(y){ return y.範囲 === '指定された地階'; })) return 付('要る（指定された地階）');
-  if(st === '要る' && r.要る.every(function(y){ return y.範囲 === '階' || y.範囲 === '指定された地階'; })) return 付('要る（一部の階）');
+  // 当たった号がどれも建物の一部だけのときは、かっこに範囲を入れる（一部の用途・舞台部・一部の階・指定された地階。判定.js の 一部の名）
+  var 一部 = st === '要る' ? 一部の名(r) : '';
+  if(一部) return 付('要る（' + 一部 + '）');
   if(st === '要らない' && 効く注記(r).length) return '要らない（条件あり）';
   return st === '要る' ? 付(st) : st;
 }
