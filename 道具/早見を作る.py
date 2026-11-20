@@ -585,13 +585,17 @@ function 要の名前(ns){
 }
 var 特殊の語 = /駐車|道路|通信機器|発電機|変圧器|電気設備|ボイラー|火を多く|ヘリポート|自動車の修理|整備/;
 function 効く注記(r){ return r.注記.filter(function(y){ return !(答.特殊部分 === false && 特殊の語.test(y.理由 || '')); }); }
+// 「要る」と出ているが、もっと広い範囲に要る号がまだ決まっていない（質問に「わからない」と答えたか、途中で結果を見た）ときの、その号
+function 広がる待ち(r){ return 見た目(r) === '要る' ? r.待ち.filter(function(w){ return まだ広がる(r, w); }) : []; }
 function 見出し(r){
-  var st = 見た目(r);
-  if(st === '要る' && r.内訳 && r.要る.every(function(y){ return y.どこ !== '建物全体'; })) return '要る（一部の用途）';
-  if(st === '要る' && r.要る.every(function(y){ return y.範囲 === '指定された地階'; })) return '要る（指定された地階）';
-  if(st === '要る' && r.要る.every(function(y){ return y.範囲 === '階' || y.範囲 === '指定された地階'; })) return '要る（一部の階）';
+  var st = 見た目(r), 広 = 広がる待ち(r);
+  var 未 = !広.length ? '' : 広.some(function(w){ return !w.どこ || w.どこ === '建物全体'; }) ? '建物全体は未定' : 'ほかの用途の部分は未定';
+  function 付(s){ return !未 ? s : s.slice(-1) === '）' ? s.slice(0, -1) + '・' + 未 + '）' : s + '（' + 未 + '）'; }
+  if(st === '要る' && r.内訳 && r.要る.every(function(y){ return y.どこ !== '建物全体'; })) return 付('要る（一部の用途）');
+  if(st === '要る' && r.要る.every(function(y){ return y.範囲 === '指定された地階'; })) return 付('要る（指定された地階）');
+  if(st === '要る' && r.要る.every(function(y){ return y.範囲 === '階' || y.範囲 === '指定された地階'; })) return 付('要る（一部の階）');
   if(st === '要らない' && 効く注記(r).length) return '要らない（条件あり）';
-  return st;
+  return st === '要る' ? 付(st) : st;
 }
 function 読み替え(t){
   // 面積の基準を構造と内装で読み替える行がこの用途にあるとき、その倍率を1行で
@@ -883,6 +887,12 @@ function 描く(){
     if(結果つき){
       var r = 全部を判定([t], 答)[0], st = 見た目(r), why = '';
       if(st === '要る') why = r.要る.map(function(y){ return (y.どこ ? '【'+esc(y.どこ)+'】' : '')+esc(y.号)+(y.理由?'（'+esc(y.理由)+'）':'')+(y.範囲==='階'?'（その階に設置）':y.範囲==='舞台部'?'（舞台部に設置）':y.範囲==='その部分'?'（その部分に設置）':y.範囲==='指定された地階'?'（指定された地階に設置）':'')+(y.線&&y.線.length?'<br>'+esc(y.線.join('・')):''); }).join('<br>');
+      if(st === '要る' && 広がる待ち(r).length){
+        // 一部の範囲の号で「要る」と決まったが、もっと広い範囲に要る号が決まっていない。決まった号だけを見て、ほかは要らないと読まれないようにする
+        var 広 = 広がる待ち(r), 広id = [];
+        広.forEach(function(w){ w.要.forEach(function(n){ (n.indexOf('max:') === 0 ? n.slice(4).split(',') : n === '平屋以外' ? ['地上','地下'] : [n]).forEach(function(x){ var v = 答[x]; if((v === undefined || v === 不明) && 広id.indexOf(x) < 0 && 名前(x, 答) !== x) 広id.push(x); }); }); });
+        why += '<div class="note">上に出ているのは、決まった号だけ。' + (広.some(function(w){ return !w.どこ || w.どこ === '建物全体'; }) ? '建物全体に要るか' : 'ほかの用途の部分に要るか') + '（' + esc(広.map(function(w){ return (w.どこ ? '【' + w.どこ + '】' : '') + w.row.号; }).filter(function(x, i, xs){ return xs.indexOf(x) === i; }).join('・')) + '）は、まだ決まっていない。これが分かれば決まる（押すと答えられる）:</div>' + 広id.map(function(x){ return '<button class="nb lite" onclick="見直す(\''+x+'\')">'+esc(名前(x, 答))+(答[x] === 不明 ? '<span class="kj">「わからない」と答えた</span>' : '')+'</button>'; }).join('');
+      }
       if(st === 'まだ決まらない'){
         var ws = [], ids = [];
         r.待ち.forEach(function(w){
